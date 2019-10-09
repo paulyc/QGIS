@@ -1,0 +1,30 @@
+#!/bin/bash -x
+
+station='PHL'
+type='TR0'
+year=$( date -u +%Y )
+month=$( date -u +%m )
+day=$( date -u +%d )
+ymd="${year}${month}${day}"
+imgprefix="${station}_${type}_${ymd}"
+
+# https://mesonet.agron.iastate.edu/archive/data/2019/10/09/GIS/ridge/PHL/TR0/
+index_uri="https://mesonet.agron.iastate.edu/archive/data/${year}/${month}/${day}/GIS/ridge/${station}/${type}/"
+curl "$index_uri" > index.html
+pngregex="${imgprefix}.....png"
+wldregex="${imgprefix}.....wld"
+pngs=$( grep "$pngregex" index.html | sed "s/^.*\($pngregex\).*$/\1/" )
+wlds=$( grep "$wldregex" index.html | sed "s/^.*\($wldregex\).*$/\1/" )
+
+for f in $pngs; do
+  lastpng="$f"
+done
+
+for f in $wlds; do
+  lastwld="$f"
+done
+
+echo "Last: $lastpng $lastwld"
+
+curl "${index_uri}${lastpng}" > $lastpng
+curl "${index_uri}${lastwld}" > $lastwld
