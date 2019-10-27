@@ -264,10 +264,11 @@ QgsRelation::RelationStrength QgsRelationAddDlg::relationStrength()
 void QgsRelationAddDlg::checkDefinitionValid()
 {
   bool valid = mReferencingLayerCombobox->currentLayer() && mReferencedLayerCombobox->currentLayer();
-  for ( int i = 0; i < mFieldPairWidgets.count(); i++ )
+  for ( const QgsFieldPairWidget *fieldPairWidget : qgis::as_const( mFieldPairWidgets ) )
   {
-    valid &= mFieldPairWidgets.at( i )->isPairEnabled() || !mFieldPairWidgets.at( i )->referencingField().isNull();
-    valid &= mFieldPairWidgets.at( i )->isPairEnabled()  || !mFieldPairWidgets.at( i )->referencedField().isNull();
+    if ( !fieldPairWidget->isPairEnabled() )
+      continue;
+    valid &= !fieldPairWidget->referencingField().isNull() && !fieldPairWidget->referencedField().isNull();
   }
   mButtonBox->button( QDialogButtonBox::Ok )->setEnabled( valid );
 }

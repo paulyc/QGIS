@@ -38,8 +38,8 @@ from qgis.core import (
     QgsCoordinateReferenceSystem,
     QgsProject
 )
-from qgis.PyQt.QtCore import QDir
-from qgis.PyQt.QtGui import QImage, QPainter, QPen, QColor, QBrush, QPainterPath
+from qgis.PyQt.QtCore import QDir, QPointF
+from qgis.PyQt.QtGui import QImage, QPainter, QPen, QColor, QBrush, QPainterPath, QPolygonF
 
 from qgis.testing import (
     start_app,
@@ -5151,6 +5151,35 @@ class TestQgsGeometry(unittest.TestCase):
             self.assertEqual(res.asWkt(1), t[1],
                              "mismatch for {}, expected:\n{}\nGot:\n{}\n".format(t[0], t[1], res.asWkt(1)))
 
+    def testLineStringFromBezier(self):
+        tests = [
+            [QgsPoint(1, 1), QgsPoint(10, 1), QgsPoint(10, 10), QgsPoint(20, 10), 5, 'LineString (1 1, 5.5 1.9, 8.7 4.2, 11.6 6.8, 15 9.1, 20 10)'],
+            [QgsPoint(1, 1), QgsPoint(10, 1), QgsPoint(10, 10), QgsPoint(1, 1), 10,
+             'LineString (1 1, 3.4 1.2, 5.3 1.9, 6.7 2.7, 7.5 3.6, 7.8 4.4, 7.5 4.9, 6.7 5, 5.3 4.5, 3.4 3.2, 1 1)'],
+            [QgsPoint(1, 1), QgsPoint(10, 1), QgsPoint(10, 10), QgsPoint(20, 10), 10,
+             'LineString (1 1, 3.4 1.3, 5.5 1.9, 7.2 2.9, 8.7 4.2, 10.1 5.5, 11.6 6.8, 13.2 8.1, 15 9.1, 17.3 9.7, 20 10)'],
+            [QgsPoint(1, 1), QgsPoint(10, 1), QgsPoint(10, 10), QgsPoint(20, 10), 1,
+             'LineString (1 1, 20 10)'],
+            [QgsPoint(1, 1), QgsPoint(10, 1), QgsPoint(10, 10), QgsPoint(20, 10), 0,
+             'LineString EMPTY'],
+            [QgsPoint(1, 1, 2), QgsPoint(10, 1), QgsPoint(10, 10), QgsPoint(20, 10), 5,
+             'LineString (1 1, 5.5 1.9, 8.7 4.2, 11.6 6.8, 15 9.1, 20 10)'],
+            [QgsPoint(1, 1), QgsPoint(10, 1, 2), QgsPoint(10, 10), QgsPoint(20, 10), 5,
+             'LineString (1 1, 5.5 1.9, 8.7 4.2, 11.6 6.8, 15 9.1, 20 10)'],
+            [QgsPoint(1, 1, 2), QgsPoint(10, 1), QgsPoint(10, 10, 2), QgsPoint(20, 10), 5,
+             'LineString (1 1, 5.5 1.9, 8.7 4.2, 11.6 6.8, 15 9.1, 20 10)'],
+            [QgsPoint(1, 1, 2), QgsPoint(10, 1), QgsPoint(10, 10), QgsPoint(20, 10, 2), 5,
+             'LineString (1 1, 5.5 1.9, 8.7 4.2, 11.6 6.8, 15 9.1, 20 10)'],
+            [QgsPoint(1, 1, 1), QgsPoint(10, 1, 2), QgsPoint(10, 10, 3), QgsPoint(20, 10, 4), 5,
+             'LineStringZ (1 1 1, 5.5 1.9 1.6, 8.7 4.2 2.2, 11.6 6.8 2.8, 15 9.1 3.4, 20 10 4)'],
+            [QgsPoint(1, 1, 1, 10), QgsPoint(10, 1, 2, 9), QgsPoint(10, 10, 3, 2), QgsPoint(20, 10, 4, 1), 5,
+             'LineStringZM (1 1 1 10, 5.5 1.9 1.6 8.8, 8.7 4.2 2.2 6.7, 11.6 6.8 2.8 4.3, 15 9.1 3.4 2.2, 20 10 4 1)']
+        ]
+        for t in tests:
+            res = QgsLineString.fromBezierCurve(t[0], t[1], t[2], t[3], t[4])
+            self.assertEqual(res.asWkt(1), t[5],
+                             "mismatch for {}, expected:\n{}\nGot:\n{}\n".format(t[0], t[5], res.asWkt(1)))
+
     def testIsGeosValid(self):
         tests = [
             ["", False, False, ''],
@@ -5199,6 +5228,44 @@ class TestQgsGeometry(unittest.TestCase):
             res = g1.validateGeometry(QgsGeometry.ValidatorQgisInternal)
             self.assertEqual(res, t[3],
                              "mismatch for {}, expected:\n{}\nGot:\n{}\n".format(t[0], t[3], res[0].where() if res else ''))
+
+    def testRandomPoints(self):
+        """
+        Test QgsGeometry.randomPointsInPolygon.
+
+        This just test the Python operation of this function -- more tests in testqgsgeometry.cpp
+        """
+
+        # no random points inside null geometry
+        g = QgsGeometry()
+        with self.assertRaises(ValueError):
+            res = g.randomPointsInPolygon(100)
+        # no random points inside linestring
+        g = QgsGeometry.fromWkt('LineString(4 5, 6 6)')
+        with self.assertRaises(TypeError):
+            res = g.randomPointsInPolygon(100)
+        # good!
+        g = QgsGeometry.fromWkt('Polygon(( 5 15, 10 15, 10 20, 5 20, 5 15 ), (6 16, 8 16, 8 18, 6 16 ))')
+        res = g.randomPointsInPolygon(100)
+        self.assertEqual(len(res), 100)
+        g = QgsGeometry.fromWkt('MultiPolygon((( 5 15, 10 15, 10 20, 5 20, 5 15 ), (6 16, 8 16, 8 18, 6 16 )), (( 105 115, 110 115, 110 120, 105 120, 105 115 ), (106 116, 108 116, 108 118, 106 116 )))')
+        res = g.randomPointsInPolygon(100)
+        self.assertEqual(len(res), 100)
+        res2 = g.randomPointsInPolygon(100)
+        self.assertNotEqual(res, res2)
+
+        # with seed
+        res = g.randomPointsInPolygon(100, seed=123123)
+        res2 = g.randomPointsInPolygon(100, seed=123123)
+        self.assertEqual(res, res2)
+
+    def testLineStringFromQPolygonF(self):
+        line = QgsLineString.fromQPolygonF(QPolygonF())
+        self.assertEqual(line.asWkt(0), 'LineString EMPTY')
+        line = QgsLineString.fromQPolygonF(QPolygonF([QPointF(1, 2), QPointF(3, 4)]))
+        self.assertEqual(line.asWkt(1), 'LineString (1 2, 3 4)')
+        line = QgsLineString.fromQPolygonF(QPolygonF([QPointF(1.5, 2.5), QPointF(3, 4), QPointF(3, 6.5), QPointF(1.5, 2.5)]))
+        self.assertEqual(line.asWkt(1), 'LineString (1.5 2.5, 3 4, 3 6.5, 1.5 2.5)')
 
     def renderGeometry(self, geom, use_pen, as_polygon=False, as_painter_path=False):
         image = QImage(200, 200, QImage.Format_RGB32)

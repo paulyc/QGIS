@@ -268,6 +268,7 @@ class GUI_EXPORT QgsTextFormatWidget : public QWidget, public QgsExpressionConte
     void mFontStyleComboBox_currentIndexChanged( const QString &text );
     void mFontUnderlineBtn_toggled( bool ckd );
     void mFontStrikethroughBtn_toggled( bool ckd );
+    void kerningToggled( bool checked );
     void mFontWordSpacingSpinBox_valueChanged( double spacing );
     void mFontLetterSpacingSpinBox_valueChanged( double spacing );
     void mFontSizeUnitWidget_changed();
@@ -296,6 +297,9 @@ class GUI_EXPORT QgsTextFormatWidget : public QWidget, public QgsExpressionConte
     void updateAvailableShadowPositions();
     void updateProperty();
     void createAuxiliaryField();
+    void updateShapeFrameStatus();
+    void updateBufferFrameStatus();
+    void updateShadowFrameStatus();
 };
 
 
@@ -348,6 +352,10 @@ class GUI_EXPORT QgsTextFormatDialog : public QDialog
 
     QgsTextFormatWidget *mFormatWidget = nullptr;
     QDialogButtonBox *mButtonBox = nullptr;
+
+  private slots:
+    void showHelp();
+
 };
 
 /**

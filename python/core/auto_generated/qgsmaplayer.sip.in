@@ -1398,6 +1398,14 @@ Sets the coordinate transform context to ``transformContext``
 
   signals:
 
+    void beforeResolveReferences( QgsProject *project );
+%Docstring
+Emitted when all layers are loaded and references can be resolved,
+just before the references of this layer are resolved.
+
+.. versionadded:: 3.10
+%End
+
     void statusChanged( const QString &status );
 %Docstring
 Emit a signal with status (e.g. to be caught by QgisApp and display a msg on status bar)
@@ -1659,10 +1667,14 @@ Sets error message
 
 
 
-    bool hasDependencyCycle( const QSet<QgsMapLayerDependency> &layers ) const;
+ bool hasDependencyCycle( const QSet<QgsMapLayerDependency> & ) const;
 %Docstring
 Checks whether a new set of dependencies will introduce a cycle
+this method is now deprecated and always return false, because circular dependencies are now correctly managed.
+
+.. deprecated:: QGIS 3.10
 %End
+
 
 
 

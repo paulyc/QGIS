@@ -37,10 +37,13 @@ void QgsGeometryGapCheck::prepare( const QgsGeometryCheckContext *context, const
   if ( configuration.value( QStringLiteral( "allowedGapsEnabled" ) ).toBool() )
   {
     QgsVectorLayer *layer = context->project()->mapLayer<QgsVectorLayer *>( configuration.value( "allowedGapsLayer" ).toString() );
-    mAllowedGapsLayer = layer;
-    mAllowedGapsSource = qgis::make_unique<QgsVectorLayerFeatureSource>( layer );
+    if ( layer )
+    {
+      mAllowedGapsLayer = layer;
+      mAllowedGapsSource = qgis::make_unique<QgsVectorLayerFeatureSource>( layer );
 
-    mAllowedGapsBuffer = configuration.value( QStringLiteral( "allowedGapsBuffer" ) ).toDouble();
+      mAllowedGapsBuffer = configuration.value( QStringLiteral( "allowedGapsBuffer" ) ).toDouble();
+    }
   }
   else
   {
@@ -228,7 +231,8 @@ void QgsGeometryGapCheck::fixError( const QMap<QString, QgsFeaturePool *> &featu
           else
           {
             QgsFeature feature = QgsVectorLayerUtils::createFeature( layer, error->geometry() );
-            if ( !layer->addFeature( feature ) )
+            QgsFeatureList features = QgsVectorLayerUtils::makeFeatureCompatible( feature, layer );
+            if ( !layer->addFeatures( features ) )
             {
               error->setFixFailed( tr( "Could not add feature to layer %1" ).arg( layer->name() ) );
             }

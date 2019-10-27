@@ -83,13 +83,7 @@ email                : sherman at mrcc.com
 #endif
 
 static const QString TEXT_PROVIDER_KEY = QStringLiteral( "ogr" );
-static const QString TEXT_PROVIDER_DESCRIPTION =
-  QStringLiteral( "OGR data provider" )
-  + " (compiled against GDAL/OGR library version "
-  + GDAL_RELEASE_NAME
-  + ", running against GDAL/OGR library version "
-  + GDALVersionInfo( "RELEASE_NAME" )
-  + ')';
+static const QString TEXT_PROVIDER_DESCRIPTION = QStringLiteral( "OGR data provider" );
 
 static OGRwkbGeometryType ogrWkbGeometryTypeFromName( const QString &typeName );
 
@@ -520,7 +514,7 @@ QgsOgrProvider::QgsOgrProvider( QString const &uri, const ProviderOptions &optio
   {
     pszDataTypes = GDALGetMetadataItem( mOgrOrigLayer->driver(), GDAL_DMD_CREATIONFIELDDATATYPES, nullptr );
   }
-  // For drivers that advertize their data type, use that instead of the
+  // For drivers that advertise their data type, use that instead of the
   // above hardcoded defaults.
   if ( pszDataTypes )
   {
@@ -789,17 +783,7 @@ static OGRwkbGeometryType ogrWkbGeometryTypeFromName( const QString &typeName )
 
 void QgsOgrProvider::addSubLayerDetailsToSubLayerList( int i, QgsOgrLayer *layer, bool withFeatureCount ) const
 {
-  QgsOgrFeatureDefn &fdef = layer->GetLayerDefn();
-  // Get first column name,
-  // TODO: add support for multiple
-  QString geometryColumnName;
-  if ( fdef.GetGeomFieldCount() )
-  {
-    OGRGeomFieldDefnH geomH = fdef.GetGeomFieldDefn( 0 );
-    geometryColumnName = QString::fromUtf8( OGR_GFld_GetNameRef( geomH ) );
-  }
   QString layerName = QString::fromUtf8( layer->name() );
-  OGRwkbGeometryType layerGeomType = fdef.GetGeomType();
 
   if ( !mIsSubLayer && ( layerName == QLatin1String( "layer_styles" ) ||
                          layerName == QLatin1String( "qgis_projects" ) ) )
@@ -808,10 +792,32 @@ void QgsOgrProvider::addSubLayerDetailsToSubLayerList( int i, QgsOgrLayer *layer
     // qgis_projects (coming from http://plugins.qgis.org/plugins/QgisGeopackage/)
     return;
   }
+  // Get first column name,
+  // TODO: add support for multiple
+  QString geometryColumnName;
+  OGRwkbGeometryType layerGeomType = wkbUnknown;
+  const bool slowGeomTypeRetrieval =
+    mGDALDriverName == QLatin1String( "OAPIF" ) || mGDALDriverName == QLatin1String( "WFS3" );
+  if ( !slowGeomTypeRetrieval )
+  {
+    QgsOgrFeatureDefn &fdef = layer->GetLayerDefn();
+    if ( fdef.GetGeomFieldCount() )
+    {
+      OGRGeomFieldDefnH geomH = fdef.GetGeomFieldDefn( 0 );
+      geometryColumnName = QString::fromUtf8( OGR_GFld_GetNameRef( geomH ) );
+    }
+    layerGeomType = fdef.GetGeomType();
+  }
 
-  QgsDebugMsg( QStringLiteral( "id = %1 name = %2 layerGeomType = %3" ).arg( i ).arg( layerName ).arg( layerGeomType ) );
+  QString longDescription;
+  if ( mGDALDriverName == QLatin1String( "OAPIF" ) || mGDALDriverName == QLatin1String( "WFS3" ) )
+  {
+    longDescription = layer->GetMetadataItem( "TITLE" );
+  }
 
-  if ( wkbFlatten( layerGeomType ) != wkbUnknown )
+  QgsDebugMsg( QStringLiteral( "id = %1 name = %2 layerGeomType = %3 longDescription = %4" ).arg( i ).arg( layerName ).arg( layerGeomType ). arg( longDescription ) );
+
+  if ( slowGeomTypeRetrieval || wkbFlatten( layerGeomType ) != wkbUnknown )
   {
     int layerFeatureCount = withFeatureCount ? layer->GetApproxFeatureCount() : -1;
 
@@ -823,7 +829,8 @@ void QgsOgrProvider::addSubLayerDetailsToSubLayerList( int i, QgsOgrLayer *layer
                         << layerName
                         << QString::number( layerFeatureCount )
                         << geom
-                        << geometryColumnName;
+                        << geometryColumnName
+                        << longDescription;
 
     mSubLayerList << parts.join( QgsDataProvider::SUBLAYER_SEPARATOR );
   }
@@ -894,7 +901,8 @@ void QgsOgrProvider::addSubLayerDetailsToSubLayerList( int i, QgsOgrLayer *layer
                           << layerName
                           << QString::number( fCount.value( countIt.key() ) )
                           << geom
-                          << geometryColumnName;
+                          << geometryColumnName
+                          << longDescription;
 
       QString sl = parts.join( QgsDataProvider::SUBLAYER_SEPARATOR );
       QgsDebugMsg( "sub layer: " + sl );
@@ -1315,7 +1323,20 @@ QgsRectangle QgsOgrProvider::extent() const
     // TODO: This can be expensive, do we really need it!
     if ( mOgrLayer == mOgrOrigLayer.get() && mSubsetString.isEmpty() )
     {
-      mOgrLayer->GetExtent( mExtent.get(), true );
+      if ( ( mGDALDriverName == QLatin1String( "OAPIF" ) || mGDALDriverName == QLatin1String( "WFS3" ) ) &&
+           !mOgrLayer->TestCapability( OLCFastGetExtent ) )
+      {
+        // When the extent is not in the metadata, retrieving it would be
+        // super slow
+        mExtent->MinX = -180;
+        mExtent->MinY = -90;
+        mExtent->MaxX = 180;
+        mExtent->MaxY = 90;
+      }
+      else
+      {
+        mOgrLayer->GetExtent( mExtent.get(), true );
+      }
     }
     else
     {
@@ -2298,7 +2319,7 @@ bool QgsOgrProvider::changeAttributeValues( const QgsChangedAttributesMap &attr_
 
   if ( inTransaction )
   {
-    commitTransaction();
+    if ( ! commitTransaction() ) return false;
   }
 
   if ( mTransaction )
@@ -2381,7 +2402,7 @@ bool QgsOgrProvider::changeGeometryValues( const QgsGeometryMap &geometry_map )
 
   if ( inTransaction )
   {
-    commitTransaction();
+    if ( ! commitTransaction() ) return false;
   }
 
   if ( mTransaction )
@@ -2489,7 +2510,7 @@ bool QgsOgrProvider::deleteFeatures( const QgsFeatureIds &id )
 
   if ( inTransaction )
   {
-    commitTransaction();
+    if ( ! commitTransaction() ) return false;
   }
 
   if ( mTransaction )
@@ -2536,7 +2557,7 @@ bool QgsOgrProvider::doInitialActionsForEdition()
   // If mUpdateModeStackDepth > 0, it means that an updateMode is already active and that we have write access
   if ( mUpdateModeStackDepth == 0 )
   {
-    QgsDebugMsg( QStringLiteral( "Enter update mode implictly" ) );
+    QgsDebugMsg( QStringLiteral( "Enter update mode implicitly" ) );
     if ( !_enterUpdateMode( true ) )
       return false;
   }
@@ -3225,11 +3246,11 @@ QString createFilters( const QString &type )
     }                          // each loaded OGR driver
 
     // sort file filters alphabetically
-    QgsDebugMsg( "myFileFilters: " + sFileFilters );
+    QgsDebugMsgLevel( "myFileFilters: " + sFileFilters, 2 );
     QStringList filters = sFileFilters.split( QStringLiteral( ";;" ), QString::SkipEmptyParts );
     filters.sort();
     sFileFilters = filters.join( QStringLiteral( ";;" ) ) + ";;";
-    QgsDebugMsg( "myFileFilters: " + sFileFilters );
+    QgsDebugMsgLevel( "myFileFilters: " + sFileFilters, 2 );
 
     // VSIFileHandler (.zip and .gz files) - second
     //   see http://trac.osgeo.org/gdal/wiki/UserDocs/ReadInZip
@@ -3249,7 +3270,7 @@ QString createFilters( const QString &type )
     // cleanup
     if ( sFileFilters.endsWith( QLatin1String( ";;" ) ) ) sFileFilters.chop( 2 );
 
-    QgsDebugMsg( "myFileFilters: " + sFileFilters );
+    QgsDebugMsgLevel( "myFileFilters: " + sFileFilters, 2 );
   }
 
   if ( type == QLatin1String( "file" ) )
@@ -3920,7 +3941,7 @@ GDALDatasetH QgsOgrProviderUtils::GDALOpenWrapper( const char *pszPath, bool bUp
     // For GeoPackage, we force opening of the file in WAL (Write Ahead Log)
     // mode so as to avoid readers blocking writer(s), and vice-versa.
     // https://www.sqlite.org/wal.html
-    // But only do that on a local file since WAL is advertized not to work
+    // But only do that on a local file since WAL is advertised not to work
     // on network shares
     CPLSetThreadLocalConfigOption( "OGR_SQLITE_JOURNAL", "WAL" );
     bIsLocalGpkg = true;
@@ -4347,6 +4368,13 @@ void QgsOgrProvider::open( OpenMode mode )
   QgsDebugMsgLevel( "mSubsetString: " + mSubsetString, 3 );
   CPLSetConfigOption( "OGR_ORGANIZE_POLYGONS", "ONLY_CCW" );  // "SKIP" returns MULTIPOLYGONs for multiringed POLYGONs
   CPLSetConfigOption( "GPX_ELE_AS_25D", "YES" );  // use GPX elevation as z values
+  if ( !CPLGetConfigOption( "OSM_USE_CUSTOM_INDEXING", nullptr ) )
+  {
+    // Disable custom/fast indexing by default, as it can prevent some .osm.pbf
+    // files to be loaded.
+    // See https://github.com/qgis/QGIS/issues/31062
+    CPLSetConfigOption( "OSM_USE_CUSTOM_INDEXING", "NO" );
+  }
 
   if ( mFilePath.startsWith( QLatin1String( "MySQL:" ) ) && !mLayerName.isEmpty() && !mFilePath.endsWith( ",tables=" + mLayerName ) )
   {
@@ -4523,6 +4551,7 @@ void QgsOgrProvider::close()
 
 void QgsOgrProvider::reloadData()
 {
+  mFeaturesCounted = QgsVectorDataProvider::Uncounted;
   bool wasValid = mValid;
   forceReload();
   close();
@@ -5583,7 +5612,7 @@ QString  QgsOgrLayer::driverName()
 QByteArray QgsOgrLayer::name()
 {
   QMutexLocker locker( &ds->mutex );
-  return OGR_FD_GetName( OGR_L_GetLayerDefn( hLayer ) );
+  return OGR_L_GetName( hLayer );
 }
 
 void QgsOgrLayer::ResetReading()
@@ -5710,6 +5739,10 @@ GIntBig QgsOgrLayer::GetApproxFeatureCount()
         return maxrowid - minrowid + 1;
       }
     }
+  }
+  if ( driverName == QLatin1String( "OAPIF" ) || driverName == QLatin1String( "OAPIF" ) )
+  {
+    return -1;
   }
 
   return OGR_L_GetFeatureCount( hLayer, TRUE );
@@ -5931,6 +5964,13 @@ QgsOgrLayerUniquePtr QgsOgrLayer::ExecuteSQL( const QByteArray &sql )
                                     QString::fromUtf8( sql ),
                                     ds,
                                     hSqlLayer );
+}
+
+QString QgsOgrLayer::GetMetadataItem( const QString &key, const QString &domain )
+{
+  QMutexLocker locker( &ds->mutex );
+  return GDALGetMetadataItem( hLayer, key.toUtf8().constData(),
+                              domain.toUtf8().constData() );
 }
 
 QMutex &QgsOgrFeatureDefn::mutex()
@@ -6649,7 +6689,6 @@ void QgsOgrProviderMetadata::cleanupProvider()
 
 
 
-
 QgsOgrProviderMetadata::QgsOgrProviderMetadata()
   : QgsProviderMetadata( TEXT_PROVIDER_KEY, TEXT_PROVIDER_DESCRIPTION )
 {
@@ -6678,9 +6717,9 @@ QgsAbstractProviderConnection *QgsOgrProviderMetadata::createConnection( const Q
   return new QgsGeoPackageProviderConnection( connName );
 }
 
-QgsAbstractProviderConnection *QgsOgrProviderMetadata::createConnection( const QString &connName, const QString &uri )
+QgsAbstractProviderConnection *QgsOgrProviderMetadata::createConnection( const QString &uri, const QVariantMap &configuration )
 {
-  return new QgsGeoPackageProviderConnection( connName, uri );
+  return new QgsGeoPackageProviderConnection( uri, configuration );
 }
 
 void QgsOgrProviderMetadata::deleteConnection( const QString &name )
@@ -6688,9 +6727,9 @@ void QgsOgrProviderMetadata::deleteConnection( const QString &name )
   deleteConnectionProtected<QgsGeoPackageProviderConnection>( name );
 }
 
-void QgsOgrProviderMetadata::saveConnection( QgsAbstractProviderConnection *conn, const QVariantMap &configuration )
+void QgsOgrProviderMetadata::saveConnection( const QgsAbstractProviderConnection *conn, const QString &name )
 {
-  saveConnectionProtected( conn, configuration );
+  saveConnectionProtected( conn, name );
 }
 
 ///@endcond

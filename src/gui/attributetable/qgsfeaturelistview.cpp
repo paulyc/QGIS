@@ -205,10 +205,7 @@ void QgsFeatureListView::setEditSelection( const QModelIndex &index, QItemSelect
   bool ok = true;
   emit aboutToChangeEditSelection( ok );
 
-#ifdef QGISDEBUG
-  if ( index.model() != mModel->masterModel() )
-    qWarning() << "Index from wrong model passed in";
-#endif
+  Q_ASSERT( index.model() == mModel->masterModel() || !index.isValid() );
 
   if ( ok )
     mCurrentEditSelectionModel->select( index, command );
@@ -373,7 +370,7 @@ void QgsFeatureListView::ensureEditSelection( bool inSelection )
   // could fall back to
   bool validEditSelectionAvailable = false;
 
-  if ( selectedIndexes.isEmpty() || mModel->mapFromMaster( selectedIndexes.first() ).row() == -1 )
+  if ( selectedIndexes.isEmpty() || !selectedIndexes.first().isValid() || mModel->mapFromMaster( selectedIndexes.first() ).row() == -1 )
   {
     validEditSelectionAvailable = false;
   }

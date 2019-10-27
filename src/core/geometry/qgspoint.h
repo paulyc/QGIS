@@ -145,24 +145,44 @@ class CORE_EXPORT QgsPoint: public QgsAbstractGeometry
 
       const QgsWkbTypes::Type type = wkbType();
 
-      bool equal = pt->wkbType() == type;
+      if ( pt->wkbType() != type )
+        return false;
 
-      if ( std::isnan( pt->x() ) || std::isnan( mX ) )
-        equal &= std::isnan( pt->x() ) && std::isnan( mX ) ;
-      else
-        equal &= qgsDoubleNear( pt->x(), mX, 1E-8 );
+      const bool nan1X = std::isnan( mX );
+      const bool nan2X = std::isnan( pt->x() );
+      if ( nan1X != nan2X )
+        return false;
+      if ( !nan1X && !qgsDoubleNear( mX, pt->x(), 1E-8 ) )
+        return false;
 
-      if ( std::isnan( pt->y() ) || std::isnan( mY ) )
-        equal &= std::isnan( pt->y() ) && std::isnan( mY ) ;
-      else
-        equal &= qgsDoubleNear( pt->y(), mY, 1E-8 );
+      const bool nan1Y = std::isnan( mY );
+      const bool nan2Y = std::isnan( pt->y() );
+      if ( nan1Y != nan2Y )
+        return false;
+      if ( !nan1Y && !qgsDoubleNear( mY, pt->y(), 1E-8 ) )
+        return false;
 
       if ( QgsWkbTypes::hasZ( type ) )
-        equal &= qgsDoubleNear( pt->z(), mZ, 1E-8 ) || ( std::isnan( pt->z() ) && std::isnan( mZ ) );
-      if ( QgsWkbTypes::hasM( type ) )
-        equal &= qgsDoubleNear( pt->m(), mM, 1E-8 ) || ( std::isnan( pt->m() ) && std::isnan( mM ) );
+      {
+        const bool nan1Z = std::isnan( mZ );
+        const bool nan2Z = std::isnan( pt->z() );
+        if ( nan1Z != nan2Z )
+          return false;
+        if ( !nan1Z && !qgsDoubleNear( mZ, pt->z(), 1E-8 ) )
+          return false;
+      }
 
-      return equal;
+      if ( QgsWkbTypes::hasM( type ) )
+      {
+        const bool nan1M = std::isnan( mM );
+        const bool nan2M = std::isnan( pt->m() );
+        if ( nan1M != nan2M )
+          return false;
+        if ( !nan1M && !qgsDoubleNear( mM, pt->m(), 1E-8 ) )
+          return false;
+      }
+
+      return true;
     }
 
     bool operator!=( const QgsAbstractGeometry &other ) const override
@@ -296,7 +316,7 @@ class CORE_EXPORT QgsPoint: public QgsAbstractGeometry
     }
 
     /**
-     * Returns the distance between this point and a specified x, y coordinate. In certain
+     * Returns the Cartesian 2D distance between this point and a specified x, y coordinate. In certain
      * cases it may be more appropriate to call the faster distanceSquared() method, e.g.,
      * when comparing distances.
      * \see distanceSquared()
@@ -308,7 +328,7 @@ class CORE_EXPORT QgsPoint: public QgsAbstractGeometry
     }
 
     /**
-     * Returns the 2D distance between this point and another point. In certain
+     * Returns the Cartesian 2D distance between this point and another point. In certain
      * cases it may be more appropriate to call the faster distanceSquared() method, e.g.,
      * when comparing distances.
      * \since QGIS 3.0
@@ -319,7 +339,7 @@ class CORE_EXPORT QgsPoint: public QgsAbstractGeometry
     }
 
     /**
-     * Returns the squared distance between this point a specified x, y coordinate. Calling
+     * Returns the Cartesian 2D squared distance between this point a specified x, y coordinate. Calling
      * this is faster than calling distance(), and may be useful in use cases such as comparing
      * distances where the extra expense of calling distance() is not required.
      * \see distance()
@@ -331,7 +351,7 @@ class CORE_EXPORT QgsPoint: public QgsAbstractGeometry
     }
 
     /**
-     * Returns the squared distance between this point another point. Calling
+     * Returns the Cartesian 2D squared distance between this point another point. Calling
      * this is faster than calling distance(), and may be useful in use cases such as comparing
      * distances where the extra expense of calling distance() is not required.
      * \see distance()
@@ -343,7 +363,7 @@ class CORE_EXPORT QgsPoint: public QgsAbstractGeometry
     }
 
     /**
-     * Returns the 3D distance between this point and a specified x, y, z coordinate. In certain
+     * Returns the Cartesian 3D distance between this point and a specified x, y, z coordinate. In certain
      * cases it may be more appropriate to call the faster distanceSquared() method, e.g.,
      * when comparing distances.
      * \see distanceSquared()
@@ -352,7 +372,7 @@ class CORE_EXPORT QgsPoint: public QgsAbstractGeometry
     double distance3D( double x, double y, double z ) const;
 
     /**
-     * Returns the 3D distance between this point and another point. In certain
+     * Returns the Cartesian 3D distance between this point and another point. In certain
      * cases it may be more appropriate to call the faster distanceSquared() method, e.g.,
      * when comparing distances.
      * \since QGIS 3.0
@@ -360,7 +380,7 @@ class CORE_EXPORT QgsPoint: public QgsAbstractGeometry
     double distance3D( const QgsPoint &other ) const;
 
     /**
-     * Returns the 3D squared distance between this point a specified x, y, z coordinate. Calling
+     * Returns the Cartesian 3D squared distance between this point a specified x, y, z coordinate. Calling
      * this is faster than calling distance(), and may be useful in use cases such as comparing
      * distances where the extra expense of calling distance() is not required.
      * \see distance()
@@ -369,7 +389,7 @@ class CORE_EXPORT QgsPoint: public QgsAbstractGeometry
     double distanceSquared3D( double x, double y, double z ) const;
 
     /**
-     * Returns the 3D squared distance between this point another point. Calling
+     * Returns the Cartesian 3D squared distance between this point another point. Calling
      * this is faster than calling distance(), and may be useful in use cases such as comparing
      * distances where the extra expense of calling distance() is not required.
      * \see distance()
@@ -378,13 +398,13 @@ class CORE_EXPORT QgsPoint: public QgsAbstractGeometry
     double distanceSquared3D( const QgsPoint &other ) const;
 
     /**
-     * Calculates azimuth between this point and other one (clockwise in degree, starting from north)
+     * Calculates Cartesian azimuth between this point and other one (clockwise in degree, starting from north)
      * \since QGIS 3.0
      */
     double azimuth( const QgsPoint &other ) const;
 
     /**
-     * Calculates inclination between this point and other one (starting from zenith = 0 to nadir = 180. Horizon = 90)
+     * Calculates Cartesian inclination between this point and other one (starting from zenith = 0 to nadir = 180. Horizon = 90)
      * Returns 90.0 if the distance between this point and other one is equal to 0 (same point).
      * \since QGIS 3.0
      */
@@ -392,7 +412,7 @@ class CORE_EXPORT QgsPoint: public QgsAbstractGeometry
 
     /**
      * Returns a new point which correspond to this point projected by a specified distance
-     * with specified angles (azimuth and inclination).
+     * with specified angles (azimuth and inclination), using Cartesian mathematics.
      * M value is preserved.
      * \param distance distance to project
      * \param azimuth angle to project in X Y, clockwise in degrees starting from north

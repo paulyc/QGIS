@@ -42,6 +42,7 @@
 #include "qgsgui.h"
 #include "qgsexpressioncontextutils.h"
 #include "qgsshortcutsmanager.h"
+#include "qgsfieldconditionalformatwidget.h"
 
 
 QgsDualView::QgsDualView( QWidget *parent )
@@ -52,7 +53,13 @@ QgsDualView::QgsDualView( QWidget *parent )
   connect( mFeatureListView, &QgsFeatureListView::currentEditSelectionChanged, this, &QgsDualView::featureListCurrentEditSelectionChanged );
   connect( mFeatureListView, &QgsFeatureListView::currentEditSelectionProgressChanged, this, &QgsDualView::updateEditSelectionProgress );
 
-  mConditionalFormatWidget->hide();
+  mConditionalFormatWidgetStack->hide();
+  mConditionalFormatWidget = new QgsFieldConditionalFormatWidget( this );
+  mConditionalFormatWidgetStack->setMainPanel( mConditionalFormatWidget );
+  mConditionalFormatWidget->setDockMode( true );
+
+  QgsSettings settings;
+  mConditionalSplitter->restoreState( settings.value( QStringLiteral( "/qgis/attributeTable/splitterState" ), QByteArray() ).toByteArray() );
 
   mPreviewColumnsMenu = new QMenu( this );
   mActionPreviewColumnsMenu->setMenu( mPreviewColumnsMenu );
@@ -73,8 +80,10 @@ QgsDualView::QgsDualView( QWidget *parent )
   auto createShortcuts = [ = ]( const QString & objectName, void ( QgsFeatureListView::* slot )() )
   {
     QShortcut *sc = QgsGui::shortcutsManager()->shortcutByName( objectName );
-    Q_ASSERT( sc ); // the shortcut must have been registered in the shortcuts manager
-    connect( sc, &QShortcut::activated, mFeatureListView, slot );
+    // do not assert for sc as it would lead to crashes in testing
+    // or when using custom widgets lib if built with Debug
+    if ( sc )
+      connect( sc, &QShortcut::activated, mFeatureListView, slot );
   };
   createShortcuts( QStringLiteral( "mAttributeTableFirstEditedFeature" ), &QgsFeatureListView::editFirstFeature );
   createShortcuts( QStringLiteral( "mAttributeTablePreviousEditedFeature" ), &QgsFeatureListView::editPreviousFeature );
@@ -92,6 +101,12 @@ QgsDualView::QgsDualView( QWidget *parent )
   connect( buttonGroup, qgis::overload< QAbstractButton *, bool >::of( &QButtonGroup::buttonToggled ), this, &QgsDualView::panZoomGroupButtonToggled );
   mFlashButton->setChecked( QgsSettings().value( QStringLiteral( "/qgis/attributeTable/featureListHighlightFeature" ), true ).toBool() );
   connect( mFlashButton, &QToolButton::clicked, this, &QgsDualView::flashButtonClicked );
+}
+
+QgsDualView::~QgsDualView()
+{
+  QgsSettings settings;
+  settings.setValue( QStringLiteral( "/qgis/attributeTable/splitterState" ), mConditionalSplitter->saveState() );
 }
 
 void QgsDualView::init( QgsVectorLayer *layer, QgsMapCanvas *mapCanvas, const QgsFeatureRequest &request,
@@ -545,8 +560,7 @@ bool QgsDualView::saveEditChanges()
 
 void QgsDualView::openConditionalStyles()
 {
-  mConditionalFormatWidget->setVisible( !mConditionalFormatWidget->isVisible() );
-  mConditionalFormatWidget->viewRules();
+  mConditionalFormatWidgetStack->setVisible( !mConditionalFormatWidgetStack->isVisible() );
 }
 
 void QgsDualView::setMultiEditEnabled( bool enabled )

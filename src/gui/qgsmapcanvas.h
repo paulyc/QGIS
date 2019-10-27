@@ -25,6 +25,7 @@
 #include "qgsrectangle.h"
 #include "qgsfeatureid.h"
 #include "qgsgeometry.h"
+#include "qgscustomdrophandler.h"
 
 #include <QDomDocument>
 #include <QGraphicsView>
@@ -64,6 +65,7 @@ class QgsMapTool;
 class QgsSnappingUtils;
 class QgsRubberBand;
 class QgsMapCanvasAnnotationItem;
+class QgsReferencedRectangle;
 
 /**
  * \ingroup gui
@@ -207,6 +209,16 @@ class GUI_EXPORT QgsMapCanvas : public QGraphicsView
 
     //! Sets the extent of the map canvas
     void setExtent( const QgsRectangle &r, bool magnified = false );
+
+    /**
+     * Sets the canvas to the specified \a extent.
+     *
+     * \returns TRUE if the zoom was successful.
+     *
+     * \throws QgsCsException if a transformation error occurred.
+     * \since QGIS 3.10
+     */
+    bool setReferencedExtent( const QgsReferencedRectangle &extent ) SIP_THROW( QgsCsException );
 
     /**
      * Gets the current map canvas rotation in clockwise degrees
@@ -467,7 +479,7 @@ class GUI_EXPORT QgsMapCanvas : public QGraphicsView
     //! used to determine if anti-aliasing is enabled or not
     void enableAntiAliasing( bool flag );
 
-    //! TRUE if antialising is enabled
+    //! TRUE if antialiasing is enabled
     bool antiAliasingEnabled() const { return mSettings.testFlag( QgsMapSettings::Antialiasing ); }
 
     //! sets map tile rendering flag
@@ -638,6 +650,13 @@ class GUI_EXPORT QgsMapCanvas : public QGraphicsView
      * \since QGIS 3.0
      */
     void setPreviewJobsEnabled( bool enabled );
+
+    /**
+     * Sets a list of custom drop \a handlers to use when drop events occur on the canvas.
+     * \note Not available in Python bindings
+     * \since QGIS 3.10
+     */
+    void setCustomDropHandlers( const QVector<QPointer<QgsCustomDropHandler >> &handlers ) SIP_SKIP;
 
   public slots:
 
@@ -863,41 +882,23 @@ class GUI_EXPORT QgsMapCanvas : public QGraphicsView
 
   protected:
 
-    //! Overridden standard event to be gestures aware
     bool event( QEvent *e ) override;
-
-    //! Overridden key press event
     void keyPressEvent( QKeyEvent *e ) override;
-
-    //! Overridden key release event
     void keyReleaseEvent( QKeyEvent *e ) override;
-
-    //! Overridden mouse double-click event
     void mouseDoubleClickEvent( QMouseEvent *e ) override;
-
-    //! Overridden mouse move event
     void mouseMoveEvent( QMouseEvent *e ) override;
-
-    //! Overridden mouse press event
     void mousePressEvent( QMouseEvent *e ) override;
-
-    //! Overridden mouse release event
     void mouseReleaseEvent( QMouseEvent *e ) override;
-
-    //! Overridden mouse wheel event
     void wheelEvent( QWheelEvent *e ) override;
-
-    //! Overridden resize event
     void resizeEvent( QResizeEvent *e ) override;
-
-    //! Overridden paint event
     void paintEvent( QPaintEvent *e ) override;
-
-    //! Overridden drag enter event
     void dragEnterEvent( QDragEnterEvent *e ) override;
 
     //! called when panning is in action, reset indicates end of panning
     void moveCanvasContents( bool reset = false );
+
+    void dropEvent( QDropEvent *event ) override;
+
 
     /// implementation struct
     class CanvasProperties;
@@ -1028,6 +1029,8 @@ class GUI_EXPORT QgsMapCanvas : public QGraphicsView
     bool mUsePreviewJobs = false;
 
     QHash< QString, int > mLastLayerRenderTime;
+
+    QVector<QPointer<QgsCustomDropHandler >> mDropHandlers;
 
     /**
      * Returns the last cursor position on the canvas in geographical coordinates

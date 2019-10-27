@@ -5,7 +5,6 @@
 %Include auto_generated/expression/qgsexpressionnodeimpl.sip
 %Include auto_generated/expression/qgsexpressionfunction.sip
 %Include auto_generated/qgstessellator.sip
-%Include auto_generated/qgis.sip
 %Include auto_generated/qgsabstractproviderconnection.sip
 %Include auto_generated/qgsabstractdatabaseproviderconnection.sip
 %Include auto_generated/qgsaction.sip
@@ -25,7 +24,6 @@
 %Include auto_generated/qgscolorramp.sip
 %Include auto_generated/qgscolorscheme.sip
 %Include auto_generated/qgscolorschemeregistry.sip
-%Include auto_generated/qgsconditionalstyle.sip
 %Include auto_generated/qgscoordinateformatter.sip
 %Include auto_generated/qgscoordinatetransform.sip
 %Include auto_generated/qgscoordinatetransformcontext.sip
@@ -158,6 +156,15 @@
 %Include auto_generated/auth/qgsauthmethod.sip
 %Include auto_generated/callouts/qgscallout.sip
 %Include auto_generated/callouts/qgscalloutsregistry.sip
+%Include auto_generated/classification/qgsclassificationmethodregistry.sip
+%Include auto_generated/classification/qgsclassificationmethod.sip
+%Include auto_generated/classification/qgsclassificationcustom.sip
+%Include auto_generated/classification/qgsclassificationequalinterval.sip
+%Include auto_generated/classification/qgsclassificationprettybreaks.sip
+%Include auto_generated/classification/qgsclassificationquantile.sip
+%Include auto_generated/classification/qgsclassificationjenks.sip
+%Include auto_generated/classification/qgsclassificationstandarddeviation.sip
+%Include auto_generated/classification/qgsclassificationlogarithmic.sip
 %Include auto_generated/diagram/qgsdiagram.sip
 %Include auto_generated/diagram/qgspiediagram.sip
 %Include auto_generated/diagram/qgstextdiagram.sip
@@ -269,6 +276,7 @@
 %Include auto_generated/symbology/qgspointdisplacementrenderer.sip
 %Include auto_generated/symbology/qgspointdistancerenderer.sip
 %Include auto_generated/symbology/qgsrenderer.sip
+%Include auto_generated/symbology/qgsrendererrange.sip
 %Include auto_generated/symbology/qgsrendererregistry.sip
 %Include auto_generated/symbology/qgsrulebasedrenderer.sip
 %Include auto_generated/symbology/qgssinglesymbolrenderer.sip
@@ -311,6 +319,7 @@
 %Include auto_generated/geometry/qgswkbptr.sip
 %Include auto_generated/./3d/qgs3drendererregistry.sip
 %Include auto_generated/./3d/qgsabstract3drenderer.sip
+%Include auto_generated/fieldformatter/qgscheckboxfieldformatter.sip
 %Include auto_generated/fieldformatter/qgsrangefieldformatter.sip
 %Include auto_generated/fieldformatter/qgsdatetimefieldformatter.sip
 %Include auto_generated/fieldformatter/qgsfallbackfieldformatter.sip
@@ -325,14 +334,18 @@
 %Include auto_generated/validity/qgsvaliditycheckregistry.sip
 %Include auto_generated/gps/qgsqtlocationconnection.sip
 %Include auto_generated/gps/qgsgpsconnectionregistry.sip
+%Include auto_generated/qgis.sip
 %Include auto_generated/qgsabstractcontentcache.sip
 %Include auto_generated/qgsapplication.sip
 %Include auto_generated/qgsactionscoperegistry.sip
 %Include auto_generated/qgsanimatedicon.sip
 %Include auto_generated/qgsauxiliarystorage.sip
 %Include auto_generated/qgsblockingnetworkrequest.sip
+%Include auto_generated/qgsbookmarkmanager.sip
+%Include auto_generated/qgsbookmarkmodel.sip
 %Include auto_generated/qgsbrowsermodel.sip
 %Include auto_generated/qgsbrowserproxymodel.sip
+%Include auto_generated/qgsconditionalstyle.sip
 %Include auto_generated/qgscoordinatereferencesystem.sip
 %Include auto_generated/qgscredentials.sip
 %Include auto_generated/qgsdataitem.sip
@@ -382,6 +395,7 @@
 %Include auto_generated/qgsrelation.sip
 %Include auto_generated/qgsrunprocess.sip
 %Include auto_generated/qgssnappingconfig.sip
+%Include auto_generated/qgsstoredexpressionmanager.sip
 %Include auto_generated/qgstaskmanager.sip
 %Include auto_generated/qgstolerance.sip
 %Include auto_generated/qgstrackedvectorlayertools.sip
@@ -397,6 +411,7 @@
 %Include auto_generated/qgsvectorlayerjoinbuffer.sip
 %Include auto_generated/qgsvectorlayertools.sip
 %Include auto_generated/qgsvectorsimplifymethod.sip
+%Include auto_generated/qgsvectorlayerserverproperties.sip
 %Include auto_generated/qgssettings.sip
 %Include auto_generated/annotations/qgsannotation.sip
 %Include auto_generated/annotations/qgsannotationmanager.sip

@@ -94,6 +94,15 @@ namespace QgsWms
        */
       QImage *getLegendGraphics( QgsLayerTreeModelLegendNode &nodeModel );
 
+      /**
+       * Returns the map legend as a JSON object. The caller takes the ownership
+       * of the JSON object.
+       * \param model The layer tree model to use for building the legend
+       * \returns the legend as a JSON object
+       * \since QGIS 3.12
+       */
+      QJsonObject getLegendGraphicsAsJson( QgsLayerTreeModel &model );
+
       typedef QSet<QString> SymbolSet;
       typedef QHash<QgsVectorLayer *, SymbolSet> HitTest;
 
@@ -128,6 +137,11 @@ namespace QgsWms
        */
       QByteArray getFeatureInfo( const QString &version = "1.3.0" );
 
+      /**
+       * Configures \a layers for rendering optionally considering the map \a settings
+       */
+      void configureLayers( QList<QgsMapLayer *> &layers, QgsMapSettings *settings = nullptr );
+
     private:
       QgsLegendSettings legendSettings() const;
 
@@ -146,8 +160,10 @@ namespace QgsWms
       // Set layer opacity
       void setLayerOpacity( QgsMapLayer *layer, int opacity ) const;
 
-      // Set layer filter
+      // Set layer filter and dimension
       void setLayerFilter( QgsMapLayer *layer, const QList<QgsWmsParametersFilter> &filters );
+
+      QStringList dimensionFilter( QgsVectorLayer *layer ) const;
 
       // Set layer python filter
       void setLayerAccessControlFilter( QgsMapLayer *layer ) const;
@@ -267,8 +283,6 @@ namespace QgsWms
       void removeTemporaryLayers();
 
       void handlePrintErrors( const QgsLayout *layout ) const;
-
-      void configureLayers( QList<QgsMapLayer *> &layers, QgsMapSettings *settings = nullptr );
 
       void setLayerStyle( QgsMapLayer *layer, const QString &style ) const;
 

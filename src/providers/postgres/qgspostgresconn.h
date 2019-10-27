@@ -198,7 +198,7 @@ class QgsPostgresConn : public QObject
      */
     static QgsPostgresConn *connectDb( const QString &connInfo, bool readOnly, bool shared = true, bool transaction = false );
 
-    void ref() { ++mRef; }
+    void ref();
     void unref();
 
     //! Gets postgis version string
@@ -319,7 +319,15 @@ class QgsPostgresConn : public QObject
      */
     bool getSchemas( QList<QgsPostgresSchemaProperty> &schemas );
 
+    /**
+     * Determine type and srid of a layer from data (possibly estimated)
+     */
     void retrieveLayerTypes( QgsPostgresLayerProperty &layerProperty, bool useEstimatedMetadata );
+
+    /**
+     * Determine type and srid of a vector of layers from data (possibly estimated)
+     */
+    void retrieveLayerTypes( QVector<QgsPostgresLayerProperty *> &layerProperties, bool useEstimatedMetadata );
 
     /**
      * Gets information about the spatial tables
@@ -368,6 +376,7 @@ class QgsPostgresConn : public QObject
     static bool publicSchemaOnly( const QString &connName );
     static bool geometryColumnsOnly( const QString &connName );
     static bool dontResolveType( const QString &connName );
+    static bool useEstimatedMetadata( const QString &connName );
     static bool allowGeometrylessTables( const QString &connName );
     static bool allowProjectsInDatabase( const QString &connName );
     static void deleteConnection( const QString &connName );

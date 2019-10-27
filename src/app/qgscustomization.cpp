@@ -22,6 +22,7 @@
 #include "qgsgui.h"
 
 #include <QAction>
+#include <QWidgetAction>
 #include <QDir>
 #include <QDockWidget>
 #include <QDomDocument>
@@ -394,7 +395,8 @@ QTreeWidgetItem *QgsCustomizationDialog::readWidgetsXmlNode( const QDomNode &nod
   QString name = myElement.attribute( QStringLiteral( "objectName" ), QString() );
   QStringList data( name );
 
-  data << myElement.attribute( QStringLiteral( "label" ), name );
+  // remove '&' which are used to mark shortcut key
+  data << myElement.attribute( QStringLiteral( "label" ), name ).remove( "&" );
 
   QTreeWidgetItem *myItem = new QTreeWidgetItem( data );
 
@@ -553,7 +555,8 @@ void QgsCustomization::addTreeItemActions( QTreeWidgetItem *parentItem, const QL
     {
       // it is an ordinary action
       QStringList strs;
-      strs << action->objectName() << action->text();
+      // remove '&' which are used to mark shortcut key
+      strs << action->objectName() << action->text().remove( '&' );
       QTreeWidgetItem *item = new QTreeWidgetItem( parentItem, strs );
       item->setIcon( 0, action->icon() );
       item->setFlags( Qt::ItemIsEnabled | Qt::ItemIsUserCheckable | Qt::ItemIsSelectable );
@@ -609,7 +612,28 @@ void QgsCustomization::createTreeItemToolbars()
     tbItem->setFlags( Qt::ItemIsEnabled | Qt::ItemIsUserCheckable | Qt::ItemIsSelectable );
     tbItem->setCheckState( 0, Qt::Checked );
 
-    addTreeItemActions( tbItem, tb->actions() );
+    const QList<QWidgetAction *> tbWidgetActions = tb->findChildren<QWidgetAction *>( QString(), Qt::FindDirectChildrenOnly );
+    QList<QAction *> tbActions = tb->actions();
+
+    for ( QAction *act : tbWidgetActions )
+    {
+      QStringList actstrs;
+      // remove '&' which are used to mark shortcut key
+      actstrs << act->objectName() << act->text().remove( "&" );
+      QTreeWidgetItem *item = new QTreeWidgetItem( tbItem, actstrs );
+      item->setIcon( 0, act->icon() );
+      item->setFlags( Qt::ItemIsEnabled | Qt::ItemIsUserCheckable | Qt::ItemIsSelectable );
+      item->setCheckState( 0, Qt::Checked );
+
+      QWidgetAction *widgetAction = qobject_cast<QWidgetAction *>( act );
+      QWidget *widget = widgetAction->defaultWidget();
+      const QList<QAction *> childActions = widget->actions();
+      addTreeItemActions( item, childActions );
+
+      tbActions.removeAll( act );
+    }
+
+    addTreeItemActions( tbItem, tbActions );
   }
 
   mMainWindowItems << topItem;
@@ -742,12 +766,32 @@ void QgsCustomization::updateMainWindow( QMenu *toolBarMenu )
         for ( QAction *action : constActions )
         {
           if ( action->objectName().isEmpty() )
-          {
             continue;
-          }
+
           visible = mSettings->value( action->objectName(), true ).toBool();
           if ( !visible )
+          {
             tb->removeAction( action );
+            continue;
+          }
+
+          if ( action->metaObject()->className() == QStringLiteral( "QWidgetAction" ) )
+          {
+            mSettings->beginGroup( action->objectName() );
+            QWidgetAction *widgetAction = qobject_cast<QWidgetAction *>( action );
+            QWidget *widget = widgetAction->defaultWidget();
+            const QList<QAction *> childActions = widget->actions();
+            for ( QAction *wAction : childActions )
+            {
+              if ( wAction->objectName().isEmpty() )
+                continue;
+
+              visible = mSettings->value( wAction->objectName(), true ).toBool();
+              if ( !visible )
+                widget->removeAction( wAction );
+            }
+            mSettings->endGroup();
+          }
         }
         mSettings->endGroup();
       }
@@ -860,7 +904,7 @@ void QgsCustomization::customizeWidget( const QString &path, QWidget *widget, QS
 
   // Qt may insert some internal classes in the tree, e.g. QTabWidgetPrivate inserts
   // qt_tabwidget_stackedwidget, such widgets do not appear in the tree generated
-  // from ui files and do not have sense from user poin of view -> skip
+  // from ui files and do not have sense from user point of view -> skip
 
   if ( !QgsCustomization::sInternalWidgets.contains( name ) )
   {
@@ -979,8 +1023,8 @@ void QgsCustomization::loadDefault()
 
   // Check customization state
   int status = mySettings.value( mStatusPath, QgsCustomization::NotSet ).toInt();
-  QgsDebugMsg( "Status path = " + mStatusPath );
-  QgsDebugMsg( QStringLiteral( "status = %1" ).arg( status ) );
+  QgsDebugMsgLevel( "Status path = " + mStatusPath, 2 );
+  QgsDebugMsgLevel( QStringLiteral( "status = %1" ).arg( status ), 2 );
   if ( status == QgsCustomization::User || status == QgsCustomization::Default )
     return;
 

@@ -3,6 +3,7 @@
 # Files
 
 SET(WFS_SRCS
+  ${CMAKE_SOURCE_DIR}/external/nlohmann/json.hpp
   qgswfsprovider.cpp
   qgswfscapabilities.cpp
   qgswfsdataitems.cpp
@@ -15,6 +16,16 @@ SET(WFS_SRCS
   qgswfsshareddata.cpp
   qgswfstransactionrequest.cpp
   qgswfsutils.cpp
+  qgsbackgroundcachedfeatureiterator.cpp
+  qgsbackgroundcachedshareddata.cpp
+  qgscachedirectorymanager.cpp
+  qgsbasenetworkrequest.cpp
+  qgsoapiflandingpagerequest.cpp
+  qgsoapifapirequest.cpp
+  qgsoapifcollection.cpp
+  qgsoapifitemsrequest.cpp
+  qgsoapifprovider.cpp
+  qgsoapifutils.cpp
 )
 
 SET (WFS_MOC_HDRS
@@ -24,10 +35,18 @@ SET (WFS_MOC_HDRS
   qgswfsprovider.h
   qgswfsfeatureiterator.h
   qgswfsrequest.h
+  qgsbasenetworkrequest.h
   qgswfsdescribefeaturetype.h
   qgswfstransactionrequest.h
   qgswfsshareddata.h
   qgswfsutils.h
+  qgsbackgroundcachedfeatureiterator.h
+  qgscachedirectorymanager.h
+  qgsoapiflandingpagerequest.h
+  qgsoapifapirequest.h
+  qgsoapifcollection.h
+  qgsoapifitemsrequest.h
+  qgsoapifprovider.h
 )
 
 IF (WITH_GUI)
@@ -36,6 +55,7 @@ IF (WITH_GUI)
     qgswfsdataitemguiprovider.cpp
     qgswfssourceselect.cpp
     qgswfsnewconnection.cpp
+    qgswfsguiutils.cpp
   )
   SET(WFS_MOC_HDRS ${WFS_MOC_HDRS}
     qgswfsdataitemguiprovider.h
@@ -60,6 +80,7 @@ INCLUDE_DIRECTORIES (
   ${CMAKE_SOURCE_DIR}/src/gui
   ${CMAKE_SOURCE_DIR}/src/gui/auth
   ${CMAKE_SOURCE_DIR}/external
+  ${CMAKE_SOURCE_DIR}/external/nlohmann
 
   ${CMAKE_BINARY_DIR}/src/core
   ${CMAKE_BINARY_DIR}/src/gui
@@ -91,6 +112,7 @@ IF (WITH_GUI)
   TARGET_LINK_LIBRARIES (wfsprovider
     qgis_gui
   )
+  ADD_DEPENDENCIES(wfsprovider ui)
 ENDIF ()
 
 ########################################################

@@ -63,6 +63,8 @@
 #include "qgsmessagelog.h"
 #include "qgslayercapabilitiesmodel.h"
 #include "qgsexpressioncontextutils.h"
+#include "qgsprojectstorage.h"
+#include "qgsprojectstorageregistry.h"
 
 //qt includes
 #include <QInputDialog>
@@ -258,7 +260,19 @@ QgsProjectProperties::QgsProjectProperties( QgsMapCanvas *mapCanvas, QWidget *pa
 
   connect( mButtonOpenProjectFolder, &QToolButton::clicked, this, [ = ]
   {
-    QgsGui::nativePlatformInterface()->openFileExplorerAndSelectFile( QgsProject::instance()->fileName() );
+    QString path;
+    QString project = QgsProject::instance()->fileName();
+    QgsProjectStorage *storage = QgsProject::instance()->projectStorage();
+    if ( storage )
+      path = storage->filePath( project );
+    else
+      path = project;
+
+    if ( !path.isEmpty() )
+    {
+      QgsGui::nativePlatformInterface()->openFileExplorerAndSelectFile( path );
+    }
+
   } );
 
   // get the manner in which the number of decimal places in the mouse
@@ -282,7 +296,7 @@ QgsProjectProperties::QgsProjectProperties( QgsMapCanvas *mapCanvas, QWidget *pa
   cbxAbsolutePath->setCurrentIndex( QgsProject::instance()->readBoolEntry( QStringLiteral( "Paths" ), QStringLiteral( "/Absolute" ), true ) ? 0 : 1 );
 
   // populate combo box with ellipsoids
-  // selection of the ellipsoid from settings is defferred to a later point, because it would
+  // selection of the ellipsoid from settings is deferred to a later point, because it would
   // be overridden in the meanwhile by the projection selector
   populateEllipsoidList();
   if ( !QgsProject::instance()->crs().isValid() )
@@ -320,49 +334,40 @@ QgsProjectProperties::QgsProjectProperties( QgsMapCanvas *mapCanvas, QWidget *pa
   mAreaUnitsCombo->setCurrentIndex( mAreaUnitsCombo->findData( QgsProject::instance()->areaUnits() ) );
 
   //get the color selections and set the button color accordingly
-  int myRedInt = QgsProject::instance()->readNumEntry( QStringLiteral( "Gui" ), QStringLiteral( "/SelectionColorRedPart" ), 255 );
-  int myGreenInt = QgsProject::instance()->readNumEntry( QStringLiteral( "Gui" ), QStringLiteral( "/SelectionColorGreenPart" ), 255 );
-  int myBlueInt = QgsProject::instance()->readNumEntry( QStringLiteral( "Gui" ), QStringLiteral( "/SelectionColorBluePart" ), 0 );
-  int myAlphaInt = QgsProject::instance()->readNumEntry( QStringLiteral( "Gui" ), QStringLiteral( "/SelectionColorAlphaPart" ), 255 );
-  QColor myColor = QColor( myRedInt, myGreenInt, myBlueInt, myAlphaInt );
-  myRedInt = settings.value( QStringLiteral( "qgis/default_selection_color_red" ), 255 ).toInt();
-  myGreenInt = settings.value( QStringLiteral( "qgis/default_selection_color_green" ), 255 ).toInt();
-  myBlueInt = settings.value( QStringLiteral( "qgis/default_selection_color_blue" ), 0 ).toInt();
-  myAlphaInt = settings.value( QStringLiteral( "qgis/default_selection_color_alpha" ), 255 ).toInt();
+  int myRedInt = settings.value( QStringLiteral( "qgis/default_selection_color_red" ), 255 ).toInt();
+  int myGreenInt = settings.value( QStringLiteral( "qgis/default_selection_color_green" ), 255 ).toInt();
+  int myBlueInt = settings.value( QStringLiteral( "qgis/default_selection_color_blue" ), 0 ).toInt();
+  int myAlphaInt = settings.value( QStringLiteral( "qgis/default_selection_color_alpha" ), 255 ).toInt();
   QColor defaultSelectionColor = QColor( myRedInt, myGreenInt, myBlueInt, myAlphaInt );
+
   pbnSelectionColor->setContext( QStringLiteral( "gui" ) );
-  pbnSelectionColor->setColor( myColor );
+  pbnSelectionColor->setColor( QgsProject::instance()->selectionColor() );
   pbnSelectionColor->setDefaultColor( defaultSelectionColor );
   pbnSelectionColor->setColorDialogTitle( tr( "Selection Color" ) );
   pbnSelectionColor->setAllowOpacity( true );
 
   //get the color for map canvas background and set button color accordingly (default white)
-  myRedInt = QgsProject::instance()->readNumEntry( QStringLiteral( "Gui" ), QStringLiteral( "/CanvasColorRedPart" ), 255 );
-  myGreenInt = QgsProject::instance()->readNumEntry( QStringLiteral( "Gui" ), QStringLiteral( "/CanvasColorGreenPart" ), 255 );
-  myBlueInt = QgsProject::instance()->readNumEntry( QStringLiteral( "Gui" ), QStringLiteral( "/CanvasColorBluePart" ), 255 );
-  myColor = QColor( myRedInt, myGreenInt, myBlueInt );
   myRedInt = settings.value( QStringLiteral( "qgis/default_canvas_color_red" ), 255 ).toInt();
   myGreenInt = settings.value( QStringLiteral( "qgis/default_canvas_color_green" ), 255 ).toInt();
   myBlueInt = settings.value( QStringLiteral( "qgis/default_canvas_color_blue" ), 255 ).toInt();
   QColor defaultCanvasColor = QColor( myRedInt, myGreenInt, myBlueInt );
 
   pbnCanvasColor->setContext( QStringLiteral( "gui" ) );
-  pbnCanvasColor->setColor( myColor );
+  pbnCanvasColor->setColor( QgsProject::instance()->backgroundColor() );
   pbnCanvasColor->setDefaultColor( defaultCanvasColor );
 
   //get project scales
-  QStringList myScales = QgsProject::instance()->readListEntry( QStringLiteral( "Scales" ), QStringLiteral( "/ScalesList" ) );
-  if ( !myScales.isEmpty() )
+  const QVector< double > projectScales = QgsProject::instance()->mapScales();
+  if ( !projectScales.isEmpty() )
   {
-    const auto constMyScales = myScales;
-    for ( const QString &scale : constMyScales )
+    for ( double scale : projectScales )
     {
-      addScaleToScaleList( scale );
+      addScaleToScaleList( QStringLiteral( "1:%1" ).arg( scale ) );
     }
   }
   connect( lstScales, &QListWidget::itemChanged, this, &QgsProjectProperties::scaleItemChanged );
 
-  grpProjectScales->setChecked( QgsProject::instance()->readBoolEntry( QStringLiteral( "Scales" ), QStringLiteral( "/useProjectScales" ) ) );
+  grpProjectScales->setChecked( QgsProject::instance()->useProjectScales() );
 
   mLayerCapabilitiesModel = new QgsLayerCapabilitiesModel( QgsProject::instance(), this );
   mLayerCapabilitiesModel->setLayerTreeModel( new QgsLayerTreeModel( QgsProject::instance()->layerTreeRoot(), mLayerCapabilitiesModel ) );
@@ -1059,56 +1064,41 @@ void QgsProjectProperties::apply()
     QgsProject::instance()->setEllipsoid( mEllipsoidList[ mEllipsoidIndex ].acronym );
   }
 
-  //set the color for selections
-  QColor selectionColor = pbnSelectionColor->color();
-  QgsProject::instance()->writeEntry( QStringLiteral( "Gui" ), QStringLiteral( "/SelectionColorRedPart" ), selectionColor.red() );
-  QgsProject::instance()->writeEntry( QStringLiteral( "Gui" ), QStringLiteral( "/SelectionColorGreenPart" ), selectionColor.green() );
-  QgsProject::instance()->writeEntry( QStringLiteral( "Gui" ), QStringLiteral( "/SelectionColorBluePart" ), selectionColor.blue() );
-  QgsProject::instance()->writeEntry( QStringLiteral( "Gui" ), QStringLiteral( "/SelectionColorAlphaPart" ), selectionColor.alpha() );
-
-
-  //set the color for canvas
-  QColor canvasColor = pbnCanvasColor->color();
-  QgsProject::instance()->writeEntry( QStringLiteral( "Gui" ), QStringLiteral( "/CanvasColorRedPart" ), canvasColor.red() );
-  QgsProject::instance()->writeEntry( QStringLiteral( "Gui" ), QStringLiteral( "/CanvasColorGreenPart" ), canvasColor.green() );
-  QgsProject::instance()->writeEntry( QStringLiteral( "Gui" ), QStringLiteral( "/CanvasColorBluePart" ), canvasColor.blue() );
+  //set the color for selections and canvas background color
+  QgsProject::instance()->setSelectionColor( pbnSelectionColor->color() );
+  QgsProject::instance()->setBackgroundColor( pbnCanvasColor->color() );
 
   const auto constMapCanvases = QgisApp::instance()->mapCanvases();
   for ( QgsMapCanvas *canvas : constMapCanvases )
   {
-    canvas->setCanvasColor( canvasColor );
-    canvas->setSelectionColor( selectionColor );
     canvas->enableMapTileRendering( mMapTileRenderingCheckBox->isChecked() );
   }
-  if ( QgisApp::instance()->mapOverviewCanvas() )
-    QgisApp::instance()->mapOverviewCanvas()->setBackgroundColor( canvasColor );
 
   //save project scales
-  QStringList myScales;
-  myScales.reserve( lstScales->count() );
+  QVector< double > projectScales;
+  projectScales.reserve( lstScales->count() );
   for ( int i = 0; i < lstScales->count(); ++i )
   {
-    myScales.append( lstScales->item( i )->text() );
+    const QString scaleText = lstScales->item( i )->text();
+    const QStringList parts = scaleText.split( ':' );
+    if ( parts.size() == 2 )
+    {
+      bool ok = false;
+      const double scale = parts.at( 1 ).toDouble( &ok );
+      if ( ok )
+        projectScales.append( scale );
+    }
   }
 
-  if ( !myScales.isEmpty() )
+  if ( !projectScales.isEmpty() )
   {
-    QgsProject::instance()->writeEntry( QStringLiteral( "Scales" ), QStringLiteral( "/ScalesList" ), myScales );
-    QgsProject::instance()->writeEntry( QStringLiteral( "Scales" ), QStringLiteral( "/useProjectScales" ), grpProjectScales->isChecked() );
+    QgsProject::instance()->setMapScales( projectScales );
+    QgsProject::instance()->setUseProjectScales( grpProjectScales->isChecked() );
   }
   else
   {
-    QgsProject::instance()->removeEntry( QStringLiteral( "Scales" ), QStringLiteral( "/" ) );
-  }
-
-  //use global or project scales depending on checkbox state
-  if ( grpProjectScales->isChecked() )
-  {
-    emit scalesChanged( myScales );
-  }
-  else
-  {
-    emit scalesChanged();
+    QgsProject::instance()->setMapScales( QVector< double >() );
+    QgsProject::instance()->setUseProjectScales( false );
   }
 
   const QMap<QString, QgsMapLayer *> &mapLayers = QgsProject::instance()->mapLayers();
@@ -1492,8 +1482,6 @@ void QgsProjectProperties::apply()
   {
     canvas->refresh();
   }
-  if ( QgisApp::instance()->mapOverviewCanvas() )
-    QgisApp::instance()->mapOverviewCanvas()->refresh();
 }
 
 void QgsProjectProperties::showProjectionsTab()
@@ -2608,3 +2596,4 @@ void QgsProjectProperties::onGenerateTsFileButton() const
                             "- release to get qm file including postfix (eg. aproject_de.qm)\n"
                             "When you open it again in QGIS having set the target language (de), the project will be translated and saved with postfix (eg. aproject_de.qgs)." ).arg( l ) ) ;
 }
+

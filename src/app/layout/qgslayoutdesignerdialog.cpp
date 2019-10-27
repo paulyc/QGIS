@@ -966,6 +966,16 @@ QMenu *QgsLayoutDesignerDialog::createPopupMenu()
   return menu;
 }
 
+QgsLayoutGuideWidget *QgsLayoutDesignerDialog::guideWidget()
+{
+  return mGuideWidget;
+}
+
+void QgsLayoutDesignerDialog::showGuideDock( bool show )
+{
+  mGuideDock->setUserVisible( show );
+}
+
 QgsLayout *QgsLayoutDesignerDialog::currentLayout()
 {
   return mLayout;
@@ -1015,6 +1025,16 @@ void QgsLayoutDesignerDialog::setMasterLayout( QgsMasterLayoutInterface *layout 
   if ( dynamic_cast< QgsReport * >( layout ) )
   {
     createReportWidget();
+    mLayoutMenu->removeAction( mActionExportAsPDF );
+    mLayoutMenu->removeAction( mActionExportAsSVG );
+    mLayoutMenu->removeAction( mActionExportAsImage );
+    mLayoutMenu->removeAction( mActionPrint );
+    mLayoutToolbar->removeAction( mActionExportAsPDF );
+    mLayoutToolbar->removeAction( mActionExportAsSVG );
+    mLayoutToolbar->removeAction( mActionExportAsImage );
+    mLayoutToolbar->removeAction( mActionPrint );
+    // remove useless dangling separator
+    mLayoutToolbar->removeAction( mLayoutToolbar->actions().constLast() );
   }
   else
   {
@@ -1042,6 +1062,7 @@ void QgsLayoutDesignerDialog::setCurrentLayout( QgsLayout *layout )
   if ( !layout )
   {
     toggleActions( false );
+    mLayout = nullptr;
   }
   else
   {
@@ -1165,6 +1186,7 @@ void QgsLayoutDesignerDialog::showItemOptions( QgsLayoutItem *item, bool bringPa
 
   widget->setDesignerInterface( iface() );
   widget->setReportTypeString( reportTypeString() );
+  widget->setMasterLayout( mMasterLayout );
 
   if ( QgsLayoutPagePropertiesWidget *ppWidget = qobject_cast< QgsLayoutPagePropertiesWidget * >( widget.get() ) )
     connect( ppWidget, &QgsLayoutPagePropertiesWidget::pageOrientationChanged, this, &QgsLayoutDesignerDialog::pageOrientationChanged );
@@ -1919,6 +1941,7 @@ void QgsLayoutDesignerDialog::print()
 
   QgsLayoutExporter::PrintExportSettings printSettings;
   printSettings.rasterizeWholeImage = mLayout->customProperty( QStringLiteral( "rasterize" ), false ).toBool();
+  printSettings.predefinedMapScales = predefinedScales();
 
   QgsProxyProgressTask *proxyTask = new QgsProxyProgressTask( tr( "Printing “%1”" ).arg( mMasterLayout->name() ) );
   QgsApplication::taskManager()->addTask( proxyTask );
@@ -2351,7 +2374,7 @@ void QgsLayoutDesignerDialog::atlasPreviewTriggered( bool checked )
 
   if ( checked )
   {
-    loadAtlasPredefinedScalesFromProject();
+    loadPredefinedScalesFromProject();
   }
 
   if ( checked )
@@ -2413,7 +2436,7 @@ void QgsLayoutDesignerDialog::atlasPageComboEditingFinished()
   else if ( page != atlas->currentFeatureNumber() + 1 )
   {
     QgisApp::instance()->mapCanvas()->stopRendering();
-    loadAtlasPredefinedScalesFromProject();
+    loadPredefinedScalesFromProject();
     atlas->seekTo( page - 1 );
   }
 }
@@ -2426,7 +2449,7 @@ void QgsLayoutDesignerDialog::atlasNext()
 
   QgisApp::instance()->mapCanvas()->stopRendering();
 
-  loadAtlasPredefinedScalesFromProject();
+  loadPredefinedScalesFromProject();
   printAtlas->next();
 }
 
@@ -2438,7 +2461,7 @@ void QgsLayoutDesignerDialog::atlasPrevious()
 
   QgisApp::instance()->mapCanvas()->stopRendering();
 
-  loadAtlasPredefinedScalesFromProject();
+  loadPredefinedScalesFromProject();
   printAtlas->previous();
 }
 
@@ -2450,7 +2473,7 @@ void QgsLayoutDesignerDialog::atlasFirst()
 
   QgisApp::instance()->mapCanvas()->stopRendering();
 
-  loadAtlasPredefinedScalesFromProject();
+  loadPredefinedScalesFromProject();
   printAtlas->first();
 }
 
@@ -2462,7 +2485,7 @@ void QgsLayoutDesignerDialog::atlasLast()
 
   QgisApp::instance()->mapCanvas()->stopRendering();
 
-  loadAtlasPredefinedScalesFromProject();
+  loadPredefinedScalesFromProject();
   printAtlas->last();
 }
 
@@ -2474,8 +2497,6 @@ void QgsLayoutDesignerDialog::printAtlas()
   QgsLayoutAtlas *printAtlas = atlas();
   if ( !printAtlas || !printAtlas->enabled() )
     return;
-
-  loadAtlasPredefinedScalesFromProject();
 
   if ( containsWmsLayers() )
   {
@@ -2507,6 +2528,7 @@ void QgsLayoutDesignerDialog::printAtlas()
 
   QgsLayoutExporter::PrintExportSettings printSettings;
   printSettings.rasterizeWholeImage = mLayout->customProperty( QStringLiteral( "rasterize" ), false ).toBool();
+  printSettings.predefinedMapScales = predefinedScales();
 
   QString error;
   std::unique_ptr< QgsFeedback > feedback = qgis::make_unique< QgsFeedback >();
@@ -2622,8 +2644,6 @@ void QgsLayoutDesignerDialog::exportAtlasToRaster()
   QgsLayoutAtlas *printAtlas = atlas();
   if ( !printAtlas || !printAtlas->enabled() )
     return;
-
-  loadAtlasPredefinedScalesFromProject();
 
   // else, it has an atlas to render, so a directory must first be selected
   if ( printAtlas->filenameExpression().isEmpty() )
@@ -2784,7 +2804,6 @@ void QgsLayoutDesignerDialog::exportAtlasToSvg()
   if ( !printAtlas || !printAtlas->enabled() )
     return;
 
-  loadAtlasPredefinedScalesFromProject();
   if ( containsWmsLayers() )
   {
     showWmsPrintingWarning();
@@ -2955,7 +2974,6 @@ void QgsLayoutDesignerDialog::exportAtlasToPdf()
   if ( !printAtlas || !printAtlas->enabled() )
     return;
 
-  loadAtlasPredefinedScalesFromProject();
   if ( containsWmsLayers() )
   {
     showWmsPrintingWarning();
@@ -3564,6 +3582,7 @@ void QgsLayoutDesignerDialog::printReport()
   QgsLayoutExporter::PrintExportSettings printSettings;
   if ( mLayout )
     printSettings.rasterizeWholeImage = mLayout->customProperty( QStringLiteral( "rasterize" ), false ).toBool();
+  printSettings.predefinedMapScales = predefinedScales();
 
   QString error;
   std::unique_ptr< QgsFeedback > feedback = qgis::make_unique< QgsFeedback >();
@@ -3792,11 +3811,12 @@ void QgsLayoutDesignerDialog::createLayoutPropertiesWidget()
 
   mLayoutPropertiesWidget = new QgsLayoutPropertiesWidget( mGeneralDock, mLayout );
   mLayoutPropertiesWidget->setDockMode( true );
+  mLayoutPropertiesWidget->setMasterLayout( mMasterLayout );
   mGeneralPropertiesStack->setMainPanel( mLayoutPropertiesWidget );
 
-  QgsLayoutGuideWidget *guideWidget = new QgsLayoutGuideWidget( mGuideDock, mLayout, mView );
-  guideWidget->setDockMode( true );
-  mGuideStack->setMainPanel( guideWidget );
+  mGuideWidget = new QgsLayoutGuideWidget( mGuideDock, mLayout, mView );
+  mGuideWidget->setDockMode( true );
+  mGuideStack->setMainPanel( mGuideWidget );
 }
 
 void QgsLayoutDesignerDialog::createAtlasWidget()
@@ -4058,6 +4078,7 @@ bool QgsLayoutDesignerDialog::getRasterExportSettings( QgsLayoutExporter::ImageE
     settings.imageSize = imageSize;
   }
   settings.generateWorldFile = imageDlg.generateWorldFile();
+  settings.predefinedMapScales = predefinedScales();
   settings.flags |= QgsLayoutRenderContext::FlagUseAdvancedEffects;
   if ( imageDlg.antialiasing() )
     settings.flags |= QgsLayoutRenderContext::FlagAntialiasing;
@@ -4172,6 +4193,7 @@ bool QgsLayoutDesignerDialog::getSvgExportSettings( QgsLayoutExporter::SvgExport
   settings.exportMetadata = includeMetadata;
   settings.textRenderFormat = textRenderFormat;
   settings.simplifyGeometries = simplify;
+  settings.predefinedMapScales = predefinedScales();
 
   if ( disableRasterTiles )
     settings.flags = settings.flags | QgsLayoutRenderContext::FlagDisableTiledRasterLayerRenders;
@@ -4269,6 +4291,7 @@ bool QgsLayoutDesignerDialog::getPdfExportSettings( QgsLayoutExporter::PdfExport
   settings.useIso32000ExtensionFormatGeoreferencing = !useOgcBestPracticeFormat;
   settings.includeGeoPdfFeatures = exportGeoPdfFeatures;
   settings.exportThemes = exportThemes;
+  settings.predefinedMapScales = predefinedScales();
 
   if ( disableRasterTiles )
     settings.flags = settings.flags | QgsLayoutRenderContext::FlagDisableTiledRasterLayerRenders;
@@ -4354,29 +4377,35 @@ void QgsLayoutDesignerDialog::atlasFeatureChanged( const QgsFeature &feature )
   mView->setSectionLabel( atlas->nameForPage( atlas->currentFeatureNumber() ) );
 }
 
-void QgsLayoutDesignerDialog::loadAtlasPredefinedScalesFromProject()
+void QgsLayoutDesignerDialog::loadPredefinedScalesFromProject()
 {
-  QVector<qreal> projectScales;
+  if ( mLayout )
+    mLayout->renderContext().setPredefinedScales( predefinedScales() );
+}
+
+QVector<double> QgsLayoutDesignerDialog::predefinedScales() const
+{
+  QgsProject *project = mMasterLayout->layoutProject();
   // first look at project's scales
-  QStringList scales( mLayout->project()->readListEntry( QStringLiteral( "Scales" ), QStringLiteral( "/ScalesList" ) ) );
-  bool hasProjectScales( mLayout->project()->readBoolEntry( QStringLiteral( "Scales" ), QStringLiteral( "/useProjectScales" ) ) );
-  if ( !hasProjectScales || scales.isEmpty() )
+  QVector< double > projectScales = project->mapScales();
+  bool hasProjectScales( project->useProjectScales() );
+  if ( !hasProjectScales || projectScales.isEmpty() )
   {
     // default to global map tool scales
     QgsSettings settings;
     QString scalesStr( settings.value( QStringLiteral( "Map/scales" ), PROJECT_SCALES ).toString() );
-    scales = scalesStr.split( ',' );
-  }
+    QStringList scales = scalesStr.split( ',' );
 
-  for ( auto scaleIt = scales.constBegin(); scaleIt != scales.constEnd(); ++scaleIt )
-  {
-    QStringList parts( scaleIt->split( ':' ) );
-    if ( parts.size() == 2 )
+    for ( auto scaleIt = scales.constBegin(); scaleIt != scales.constEnd(); ++scaleIt )
     {
-      projectScales.push_back( parts[1].toDouble() );
+      QStringList parts( scaleIt->split( ':' ) );
+      if ( parts.size() == 2 )
+      {
+        projectScales.push_back( parts[1].toDouble() );
+      }
     }
   }
-  mLayout->reportContext().setPredefinedScales( projectScales );
+  return projectScales;
 }
 
 QgsLayoutAtlas *QgsLayoutDesignerDialog::atlas()
@@ -4449,6 +4478,7 @@ void QgsLayoutDesignerDialog::toggleActions( bool layoutAvailable )
   mActionExportAsImage->setEnabled( layoutAvailable );
   mActionExportAsPDF->setEnabled( layoutAvailable );
   mActionExportAsSVG->setEnabled( layoutAvailable );
+  mActionPrint->setEnabled( layoutAvailable );
   mActionCut->setEnabled( layoutAvailable );
   mActionCopy->setEnabled( layoutAvailable );
   mActionPaste->setEnabled( layoutAvailable );

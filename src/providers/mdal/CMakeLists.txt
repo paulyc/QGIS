@@ -44,6 +44,7 @@ IF (WITH_INTERNAL_MDAL)
     ${CMAKE_SOURCE_DIR}/external/mdal/frmts/mdal_ascii_dat.cpp
     ${CMAKE_SOURCE_DIR}/external/mdal/frmts/mdal_binary_dat.cpp
     ${CMAKE_SOURCE_DIR}/external/mdal/frmts/mdal_selafin.cpp
+    ${CMAKE_SOURCE_DIR}/external/mdal/frmts/mdal_esri_tin.cpp
   )
 
   SET(MDAL_LIB_HDRS
@@ -57,6 +58,7 @@ IF (WITH_INTERNAL_MDAL)
     ${CMAKE_SOURCE_DIR}/external/mdal/frmts/mdal_ascii_dat.hpp
     ${CMAKE_SOURCE_DIR}/external/mdal/frmts/mdal_binary_dat.hpp
     ${CMAKE_SOURCE_DIR}/external/mdal/frmts/mdal_selafin.hpp
+    ${CMAKE_SOURCE_DIR}/external/mdal/frmts/mdal_esri_tin.hpp
   )
 
   IF(HDF5_FOUND)
@@ -154,11 +156,11 @@ INCLUDE_DIRECTORIES (
   ${CMAKE_SOURCE_DIR}/src/gui
   ${CMAKE_SOURCE_DIR}/src/gui/auth
   ${CMAKE_SOURCE_DIR}/external
+  ${CMAKE_SOURCE_DIR}/external/nlohmann
 
   ${CMAKE_BINARY_DIR}/src/core
   ${CMAKE_BINARY_DIR}/src/gui
   ${CMAKE_BINARY_DIR}/src/ui
-
 )
 
 QT5_WRAP_CPP(MDAL_MOC_SRCS ${MDAL_MOC_HDRS})
@@ -173,6 +175,7 @@ IF (WITH_GUI)
   TARGET_LINK_LIBRARIES (mdalprovider
     qgis_gui
   )
+  ADD_DEPENDENCIES(mdalprovider ui)
 ENDIF (WITH_GUI)
 
 IF (HDF5_FOUND)

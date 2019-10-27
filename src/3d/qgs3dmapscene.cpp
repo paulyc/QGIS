@@ -49,6 +49,7 @@
 #include "qgstessellatedpolygongeometry.h"
 #include "qgsvectorlayer.h"
 #include "qgsvectorlayer3drenderer.h"
+#include "qgspoint3dbillboardmaterial.h"
 
 #include "qgslinematerial_p.h"
 
@@ -311,7 +312,7 @@ bool Qgs3DMapScene::updateCameraNearFarPlanes()
     if ( fnear == 1e9 && ffar == 0 )
     {
       // the update didn't work out... this should not happen
-      // well at least temprarily use some conservative starting values
+      // well at least temporarily use some conservative starting values
       qDebug() << "oops... this should not happen! couldn't determine near/far plane. defaulting to 1...1e9";
       fnear = 1;
       ffar = 1e9;
@@ -627,6 +628,16 @@ void Qgs3DMapScene::finalizeNewEntity( Qt3DCore::QEntity *newEntity )
     } );
 
     lm->setViewportSize( cameraController()->viewport().size() );
+  }
+  // configure billboard's viewport when the viewport is changed.
+  for ( QgsPoint3DBillboardMaterial *bm : newEntity->findChildren<QgsPoint3DBillboardMaterial *>() )
+  {
+    connect( mCameraController, &QgsCameraController::viewportChanged, bm, [bm, this]
+    {
+      bm->setViewportSize( mCameraController->viewport().size() );
+    } );
+
+    bm->setViewportSize( mCameraController->viewport().size() );
   }
 }
 

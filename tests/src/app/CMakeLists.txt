@@ -3,11 +3,11 @@
 # the UI file won't be wrapped!
 INCLUDE_DIRECTORIES(
   ${CMAKE_CURRENT_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/external/nmea
   ${CMAKE_SOURCE_DIR}/src/core
   ${CMAKE_SOURCE_DIR}/src/core/auth
   ${CMAKE_SOURCE_DIR}/src/core/expression
   ${CMAKE_SOURCE_DIR}/src/core/geometry
+  ${CMAKE_SOURCE_DIR}/src/core/layertree
   ${CMAKE_SOURCE_DIR}/src/core/layout
   ${CMAKE_SOURCE_DIR}/src/core/locator
   ${CMAKE_SOURCE_DIR}/src/core/metadata
@@ -31,6 +31,8 @@ INCLUDE_DIRECTORIES(
   ${CMAKE_SOURCE_DIR}/src/analysis
   ${CMAKE_SOURCE_DIR}/src/analysis/mesh
   ${CMAKE_SOURCE_DIR}/external
+  ${CMAKE_SOURCE_DIR}/external/nlohmann
+  ${CMAKE_SOURCE_DIR}/external/nmea
 
   ${CMAKE_BINARY_DIR}/src/analysis
   ${CMAKE_BINARY_DIR}/src/core

@@ -1254,6 +1254,14 @@ class CORE_EXPORT QgsMapLayer : public QObject
 
   signals:
 
+    /**
+     * Emitted when all layers are loaded and references can be resolved,
+     * just before the references of this layer are resolved.
+     *
+     * \since QGIS 3.10
+     */
+    void beforeResolveReferences( QgsProject *project );
+
     //! Emit a signal with status (e.g. to be caught by QgisApp and display a msg on status bar)
     void statusChanged( const QString &status );
 
@@ -1507,8 +1515,12 @@ class CORE_EXPORT QgsMapLayer : public QObject
     //! List of layers that may modify this layer on modification
     QSet<QgsMapLayerDependency> mDependencies;
 
-    //! Checks whether a new set of dependencies will introduce a cycle
-    bool hasDependencyCycle( const QSet<QgsMapLayerDependency> &layers ) const;
+    /**
+     * Checks whether a new set of dependencies will introduce a cycle
+     * this method is now deprecated and always return false, because circular dependencies are now correctly managed.
+     * \deprecated since QGIS 3.10
+     */
+    Q_DECL_DEPRECATED bool hasDependencyCycle( const QSet<QgsMapLayerDependency> & ) const {return false;}
 
     bool mIsRefreshOnNofifyEnabled = false;
     QString mRefreshOnNofifyMessage;
@@ -1520,6 +1532,13 @@ class CORE_EXPORT QgsMapLayer : public QObject
 
     //! Read flags. It's up to the subclass to respect these when restoring state from XML
     QgsMapLayer::ReadFlags mReadFlags = nullptr;
+
+    /**
+     * TRUE if the layer's CRS should be validated and invalid CRSes are not permitted.
+     *
+     * \since QGIS 3.10
+     */
+    bool mShouldValidateCrs = true;
 
   private:
 
@@ -1593,7 +1612,8 @@ class CORE_EXPORT QgsMapLayer : public QObject
      */
     QString mOriginalXmlProperties;
 
-
+    //! To avoid firing multiple time repaintRequested signal on circular layer circular dependencies
+    bool mRepaintRequestedFired = false;
 };
 
 Q_DECLARE_METATYPE( QgsMapLayer * )

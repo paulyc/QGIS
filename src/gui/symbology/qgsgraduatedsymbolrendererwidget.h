@@ -127,10 +127,10 @@ class GUI_EXPORT QgsGraduatedSymbolRendererWidget : public QgsRendererWidget, pr
     void methodComboBox_currentIndexChanged( int );
     void cleanUpSymbolSelector( QgsPanelWidget *container );
     void updateSymbolsFromWidget();
-    void toggleMethodWidgets( int idx );
     void dataDefinedSizeLegend();
     void changeGraduatedSymbol();
     void selectionChanged( const QItemSelection &selected, const QItemSelection &deselected );
+    void symmetryPointEditingFinished();
 
   protected slots:
 
@@ -160,6 +160,15 @@ class GUI_EXPORT QgsGraduatedSymbolRendererWidget : public QgsRendererWidget, pr
     void keyPressEvent( QKeyEvent *event ) override;
 
   private:
+    enum MethodMode
+    {
+      ColorMode,
+      SizeMode
+    };
+
+    QgsExpressionContext createExpressionContext() const override;
+    void toggleMethodWidgets( MethodMode mode );
+
     std::unique_ptr< QgsGraduatedSymbolRenderer > mRenderer;
 
     std::unique_ptr< QgsSymbol > mGraduatedSymbol;
@@ -170,7 +179,7 @@ class GUI_EXPORT QgsGraduatedSymbolRendererWidget : public QgsRendererWidget, pr
 
     QgsRangeList mCopyBuffer;
 
-    QgsExpressionContext createExpressionContext() const override;
+    QDoubleValidator *mSymmetryPointValidator;
 };
 
 

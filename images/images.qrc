@@ -121,7 +121,12 @@
         <file>themes/default/cap_flat.svg</file>
         <file>themes/default/cap_round.svg</file>
         <file>themes/default/cap_square.svg</file>
-        <file>themes/default/console/iconClassConsole.svg</file>
+        <file>themes/default/classification_methods/mClassificationEqualCount.svg</file>
+        <file>themes/default/classification_methods/mClassificationEqualInterval.svg</file>
+        <file>themes/default/classification_methods/mClassificationLogarithmic.svg</file>
+        <file>themes/default/classification_methods/mClassificationNaturalBreak.svg</file>
+        <file>themes/default/classification_methods/mClassificationPrettyBreak.svg</file>
+        <file>themes/default/classification_methods/mClassificationStandardDeviation.svg</file>
         <file>themes/default/console/iconClearConsole.svg</file>
         <file>themes/default/console/iconCodepadConsole.svg</file>
         <file>themes/default/console/iconHelpConsole.svg</file>
@@ -503,6 +508,7 @@
         <file>themes/default/mIconWms.svg</file>
         <file>themes/default/mIconZip.svg</file>
         <file>themes/default/mIconZoom.svg</file>
+        <file>themes/default/mItemBookmark.svg</file>
         <file>themes/default/mIndicatorFilter.svg</file>
         <file>themes/default/mLayoutItem.svg</file>
         <file>themes/default/mLayoutItemShapeEllipse.svg</file>
@@ -774,7 +780,10 @@
         <file>themes/default/mIconArrangeSymbolsRight.svg</file>
         <file>themes/default/mIconClearItem.svg</file>
         <file>themes/default/mIndicatorLayerError.svg</file>
+        <file>themes/default/mIndicatorNoCRS.svg</file>
         <file>themes/default/mActionShowUnplacedLabel.svg</file>
+        <file>themes/default/mActionHandleStoreFilterExpressionChecked.svg</file>
+        <file>themes/default/mActionHandleStoreFilterExpressionUnchecked.svg</file>
     </qresource>
     <qresource prefix="/images/tips">
         <file alias="symbol_levels.png">qgis_tips/symbol_levels.png</file>

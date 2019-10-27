@@ -49,6 +49,7 @@ class QgsMessageBar;
 class QgsLayoutAtlas;
 class QgsFeature;
 class QgsMasterLayoutInterface;
+class QgsLayoutGuideWidget;
 
 class QgsAppLayoutDesignerInterface : public QgsLayoutDesignerInterface
 {
@@ -189,6 +190,16 @@ class QgsLayoutDesignerDialog: public QMainWindow, public Ui::QgsLayoutDesignerB
      * Overloaded function used to sort menu entries alphabetically
      */
     QMenu *createPopupMenu() override;
+
+    /**
+     * Returns the dialog's guide manager widget, if it exists.
+     */
+    QgsLayoutGuideWidget *guideWidget();
+
+    /**
+     * Toggles the visibility of the guide manager dock widget.
+     */
+    void showGuideDock( bool show );
 
   public slots:
 
@@ -476,6 +487,8 @@ class QgsLayoutDesignerDialog: public QMainWindow, public Ui::QgsLayoutDesignerB
     QString mTitle;
     QString mSectionTitle;
 
+    QgsLayoutGuideWidget *mGuideWidget = nullptr;
+
     //! Save window state
     void saveWindowState();
 
@@ -528,7 +541,8 @@ class QgsLayoutDesignerDialog: public QMainWindow, public Ui::QgsLayoutDesignerB
     void atlasFeatureChanged( const QgsFeature &feature );
 
     //! Load predefined scales from the project's properties
-    void loadAtlasPredefinedScalesFromProject();
+    void loadPredefinedScalesFromProject();
+    QVector<double> predefinedScales() const;
 
     QgsLayoutAtlas *atlas();
 

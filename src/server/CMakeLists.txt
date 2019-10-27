@@ -126,12 +126,13 @@ INCLUDE_DIRECTORIES(
   ${CMAKE_SOURCE_DIR}/src/analysis/interpolation
   ${CMAKE_SOURCE_DIR}/src/plugins/diagram_overlay
   ${CMAKE_SOURCE_DIR}/src/python
+  ${CMAKE_SOURCE_DIR}/external
+  ${CMAKE_SOURCE_DIR}/external/nlohmann
 
   ${CMAKE_BINARY_DIR}/src/core
   ${CMAKE_BINARY_DIR}/src/python
   ${CMAKE_BINARY_DIR}/src/analysis
   ${CMAKE_BINARY_DIR}/src/server
-  ${CMAKE_SOURCE_DIR}/external
 )
 
 ADD_LIBRARY(qgis_server SHARED ${QGIS_SERVER_SRCS} ${QGIS_SERVER_MOC_SRCS} ${QGIS_SERVER_HDRS} ${QGIS_SERVER_MOC_HDRS})
@@ -209,4 +210,7 @@ INSTALL(FILES
   admin.sld
   wms_metadata.xml
   DESTINATION ${QGIS_CGIBIN_DIR}
+)
+ADD_CUSTOM_TARGET(qgis_server_full
+  DEPENDS qgis_mapserv.fcgi wms wfs wcs wfs3 wmts qgis_server
 )

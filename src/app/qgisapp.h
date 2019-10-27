@@ -153,6 +153,7 @@ class QgsNetworkRequestParameters;
 #include "qgsrecentprojectsitemsmodel.h"
 #include "qgsraster.h"
 #include "qgsrasterminmaxorigin.h"
+#include "qgslayertreeregistrybridge.h"
 #include "qgsmaplayeractionregistry.h"
 #include "qgsoptionswidgetfactory.h"
 #include "qgsattributetablefiltermodel.h"
@@ -178,7 +179,6 @@ class APP_EXPORT QgisApp : public QMainWindow, private Ui::MainWindow
 {
     Q_OBJECT
   public:
-
     //! Constructor
     QgisApp( QSplashScreen *splash, bool restorePlugins = true,
              bool skipVersionCheck = false, const QString &rootProfileLocation = QString(),
@@ -237,7 +237,6 @@ class APP_EXPORT QgisApp : public QMainWindow, private Ui::MainWindow
     /**
      * Attempts to run a Python script
      * \param filePath full path to Python script
-     * \since QGIS 2.7
      */
     void runScript( const QString &filePath );
 
@@ -479,6 +478,7 @@ class APP_EXPORT QgisApp : public QMainWindow, private Ui::MainWindow
     QAction *actionMapTips() { return mActionMapTips; }
     QAction *actionNewBookmark() { return mActionNewBookmark; }
     QAction *actionShowBookmarks() { return mActionShowBookmarks; }
+    QAction *actionShowBookmarkManager() { return mActionShowBookmarkManager; }
     QAction *actionDraw() { return mActionDraw; }
 
     QAction *actionDataSourceManager() { return mActionDataSourceManager; }
@@ -564,6 +564,7 @@ class APP_EXPORT QgisApp : public QMainWindow, private Ui::MainWindow
     QMenu *addLayerMenu() { return mAddLayerMenu; }
     QMenu *settingsMenu() { return mSettingsMenu; }
     QMenu *pluginMenu() { return mPluginMenu; }
+    QMenu *pluginHelpMenu() { return mMenuPluginHelp; }
     QMenu *databaseMenu() { return mDatabaseMenu; }
     QMenu *rasterMenu() { return mRasterMenu; }
     QMenu *vectorMenu() { return mVectorMenu; }
@@ -666,6 +667,9 @@ class APP_EXPORT QgisApp : public QMainWindow, private Ui::MainWindow
     //! Unregister a previously registered custom drop handler.
     void unregisterCustomDropHandler( QgsCustomDropHandler *handler );
 
+    //! Returns a list of registered custom drop handlers.
+    QVector<QPointer<QgsCustomDropHandler >> customDropHandlers() const;
+
     //! Register a new custom layout drop handler.
     void registerCustomLayoutDropHandler( QgsLayoutCustomDropHandler *handler );
 
@@ -706,6 +710,8 @@ class APP_EXPORT QgisApp : public QMainWindow, private Ui::MainWindow
      * @param categories an int as a flag value of QgsAppScreenShots::Categories
      */
     void takeAppScreenShots( const QString &saveDirectory, const int categories = 0 );
+
+    QgsLayerTreeRegistryBridge::InsertionPoint layerTreeInsertionPoint() const;
 
   public slots:
     //! save current vector layer
@@ -1067,6 +1073,15 @@ class APP_EXPORT QgisApp : public QMainWindow, private Ui::MainWindow
     //! Create a new file from a template project
     bool fileNewFromTemplate( const QString &fileName );
 
+    //! Show the spatial bookmark manager panel
+    void showBookmarkManager( bool show );
+
+    //! Show and focus the browser panel to spatial bookmarks
+    void showBookmarks();
+
+    //! Create a new spatial bookmark
+    void newBookmark( bool inProject = false );
+
   protected:
 
     //! Handle state changes (WindowTitleChange)
@@ -1394,10 +1409,6 @@ class APP_EXPORT QgisApp : public QMainWindow, private Ui::MainWindow
     //! Open project properties dialog and show the projections tab
     void projectPropertiesProjections();
     /*  void urlData(); */
-    //! Show the spatial bookmarks dialog
-    void showBookmarks( bool show );
-    //! Create a new spatial bookmark
-    void newBookmark();
     //! activates the add feature tool
     void addFeature();
     //! activates the move feature tool
@@ -2262,7 +2273,7 @@ class APP_EXPORT QgisApp : public QMainWindow, private Ui::MainWindow
     bool cmpByText( QAction *a, QAction *b );
 
     //! the user has trusted the project macros
-    bool mTrustedMacros = false;
+    bool mPythonMacrosEnabled = false;
 
     //! a bar to display warnings in a non-blocker manner
     QgsMessageBar *mInfoBar = nullptr;

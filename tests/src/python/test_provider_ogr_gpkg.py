@@ -139,7 +139,7 @@ class TestPyQgsOGRProviderGpkg(unittest.TestCase):
         ds = None
 
         vl = QgsVectorLayer('{}'.format(tmpfile), 'test', 'ogr')
-        self.assertEqual(vl.dataProvider().subLayers(), [QgsDataProvider.SUBLAYER_SEPARATOR.join(['0', 'test', '0', 'CurvePolygon', 'geom'])])
+        self.assertEqual(vl.dataProvider().subLayers(), [QgsDataProvider.SUBLAYER_SEPARATOR.join(['0', 'test', '0', 'CurvePolygon', 'geom', ''])])
         f = QgsFeature()
         f.setGeometry(QgsGeometry.fromWkt('POLYGON ((0 0,0 1,1 1,0 0))'))
         vl.dataProvider().addFeatures([f])
@@ -749,7 +749,7 @@ class TestPyQgsOGRProviderGpkg(unittest.TestCase):
         f = None
 
         vl = QgsVectorLayer(u'{}'.format(tmpfile), u'layer', u'ogr')
-        self.assertEqual(vl.dataProvider().subLayers(), [QgsDataProvider.SUBLAYER_SEPARATOR.join(['0', 'layer1:', '1', 'Point', 'geom:'])])
+        self.assertEqual(vl.dataProvider().subLayers(), [QgsDataProvider.SUBLAYER_SEPARATOR.join(['0', 'layer1:', '1', 'Point', 'geom:', ''])])
 
     def testGeopackageManyLayers(self):
         ''' test opening more than 64 layers without running out of Spatialite connections '''
@@ -819,8 +819,8 @@ class TestPyQgsOGRProviderGpkg(unittest.TestCase):
 
         vl2 = QgsVectorLayer(u'{}'.format(tmpfile), 'test', u'ogr')
         vl2.subLayers()
-        self.assertEqual(vl2.dataProvider().subLayers(), [QgsDataProvider.SUBLAYER_SEPARATOR.join(['0', 'test', '0', 'Point', 'geom']),
-                                                          QgsDataProvider.SUBLAYER_SEPARATOR.join(['1', 'test2', '0', 'Point', 'geom'])])
+        self.assertEqual(vl2.dataProvider().subLayers(), [QgsDataProvider.SUBLAYER_SEPARATOR.join(['0', 'test', '0', 'Point', 'geom', '']),
+                                                          QgsDataProvider.SUBLAYER_SEPARATOR.join(['1', 'test2', '0', 'Point', 'geom', ''])])
 
     def testGeopackageLargeFID(self):
 
@@ -1360,6 +1360,73 @@ class TestPyQgsOGRProviderGpkg(unittest.TestCase):
         self.assertTrue(vl.isValid())
         fids = set([f['fid'] for f in vl.getFeatures()])
         self.assertEqual(len(fids), 1)
+
+    def testExportMultiFromShp(self):
+        """Test if a Point is imported as single geom and MultiPoint as multi"""
+
+        single_tmpfile = os.path.join(self.basetestpath, 'testExportMultiFromShp_point.shp')
+        ds = ogr.GetDriverByName('ESRI Shapefile').CreateDataSource(single_tmpfile)
+        lyr = ds.CreateLayer('test', geom_type=ogr.wkbPoint)
+        lyr.CreateField(ogr.FieldDefn('str_field', ogr.OFTString))
+        f = ogr.Feature(lyr.GetLayerDefn())
+        f.SetGeometry(ogr.CreateGeometryFromWkt('POINT (0 0)'))
+        f.SetField('str_field', 'one')
+        lyr.CreateFeature(f)
+        f = ogr.Feature(lyr.GetLayerDefn())
+        f.SetGeometry(ogr.CreateGeometryFromWkt('POINT (1 1)'))
+        f.SetField('str_field', 'two')
+        lyr.CreateFeature(f)
+        f = None
+        ds = None
+
+        multi_tmpfile = os.path.join(self.basetestpath, 'testExportMultiFromShp_multipoint.shp')
+        ds = ogr.GetDriverByName('ESRI Shapefile').CreateDataSource(multi_tmpfile)
+        lyr = ds.CreateLayer('test', geom_type=ogr.wkbMultiPoint)
+        lyr.CreateField(ogr.FieldDefn('str_field', ogr.OFTString))
+        f = ogr.Feature(lyr.GetLayerDefn())
+        f.SetGeometry(ogr.CreateGeometryFromWkt('MULTIPOINT ((0 0))'))
+        f.SetField('str_field', 'one')
+        lyr.CreateFeature(f)
+        f = ogr.Feature(lyr.GetLayerDefn())
+        f.SetGeometry(ogr.CreateGeometryFromWkt('MULTIPOINT ((1 1), (2 2))'))
+        f.SetField('str_field', 'two')
+        lyr.CreateFeature(f)
+        f = None
+        ds = None
+
+        tmpfile = os.path.join(self.basetestpath, 'testExportMultiFromShpMulti.gpkg')
+        options = {}
+        options['driverName'] = 'GPKG'
+        lyr = QgsVectorLayer(multi_tmpfile, 'y', 'ogr')
+        self.assertTrue(lyr.isValid())
+        self.assertEqual(lyr.featureCount(), 2)
+        err, _ = QgsVectorLayerExporter.exportLayer(lyr, tmpfile, "ogr", lyr.crs(), False, options)
+        self.assertEqual(err, 0)
+        lyr = QgsVectorLayer(tmpfile, "y", "ogr")
+        self.assertTrue(lyr.isValid())
+        self.assertEqual(lyr.wkbType(), QgsWkbTypes.MultiPoint)
+        features = lyr.getFeatures()
+        f = next(features)
+        self.assertEqual(f.geometry().asWkt().upper(), 'MULTIPOINT ((0 0))')
+        f = next(features)
+        self.assertEqual(f.geometry().asWkt().upper(), 'MULTIPOINT ((1 1),(2 2))')
+
+        tmpfile = os.path.join(self.basetestpath, 'testExportMultiFromShpSingle.gpkg')
+        options = {}
+        options['driverName'] = 'GPKG'
+        lyr = QgsVectorLayer(single_tmpfile, 'y', 'ogr')
+        self.assertTrue(lyr.isValid())
+        self.assertEqual(lyr.featureCount(), 2)
+        err, _ = QgsVectorLayerExporter.exportLayer(lyr, tmpfile, "ogr", lyr.crs(), False, options)
+        self.assertEqual(err, 0)
+        lyr = QgsVectorLayer(tmpfile, "y", "ogr")
+        self.assertTrue(lyr.isValid())
+        self.assertEqual(lyr.wkbType(), QgsWkbTypes.Point)
+        features = lyr.getFeatures()
+        f = next(features)
+        self.assertEqual(f.geometry().asWkt().upper(), 'POINT (0 0)')
+        f = next(features)
+        self.assertEqual(f.geometry().asWkt().upper(), 'POINT (1 1)')
 
 
 if __name__ == '__main__':

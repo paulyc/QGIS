@@ -639,7 +639,7 @@ tests:
         name: expected/dropped_geometry.csv
         type: vector
 
-  - algorithm: qgis:creategrid
+  - algorithm: native:creategrid
     name: Create grid (lines)
     params:
       CRS: EPSG:4326
@@ -654,8 +654,17 @@ tests:
         compare:
           geometry:
             precision: 7
+          fields:
+            left:
+              precision: 7
+            right:
+              precision: 7
+            top:
+              precision: 7
+            bottom:
+              precision: 7
 
-  - algorithm: qgis:creategrid
+  - algorithm: native:creategrid
     name: Create grid (rectangles)
     params:
       CRS: EPSG:4326
@@ -670,8 +679,17 @@ tests:
         compare:
           geometry:
             precision: 7
+          fields:
+            left:
+              precision: 7
+            right:
+              precision: 7
+            top:
+              precision: 7
+            bottom:
+              precision: 7
 
-  - algorithm: qgis:creategrid
+  - algorithm: native:creategrid
     name: Create grid (diamond)
     params:
       CRS: EPSG:4326
@@ -686,8 +704,17 @@ tests:
         compare:
           geometry:
             precision: 7
+          fields:
+            left:
+              precision: 7
+            right:
+              precision: 7
+            top:
+              precision: 7
+            bottom:
+              precision: 7
 
-  - algorithm: qgis:creategrid
+  - algorithm: native:creategrid
     name: Create grid (hexagon)
     params:
       CRS: EPSG:4326
@@ -702,8 +729,17 @@ tests:
         compare:
           geometry:
             precision: 7
+          fields:
+            left:
+              precision: 7
+            right:
+              precision: 7
+            top:
+              precision: 7
+            bottom:
+              precision: 7
 
-  - algorithm: qgis:creategrid
+  - algorithm: native:creategrid
     name: Create grid (lines with overlay)
     params:
       CRS: EPSG:4326
@@ -717,8 +753,18 @@ tests:
       OUTPUT:
         name: expected/grid_lines_overlay.gml
         type: vector
+        compare:
+          fields:
+            left:
+              precision: 7
+            right:
+              precision: 7
+            top:
+              precision: 7
+            bottom:
+              precision: 7
 
-  - algorithm: qgis:creategrid
+  - algorithm: native:creategrid
     name: Create grid (rectangle with overlay)
     params:
       CRS: EPSG:4326
@@ -735,8 +781,17 @@ tests:
         compare:
           geometry:
             precision: 7
+          fields:
+            left:
+              precision: 7
+            right:
+              precision: 7
+            top:
+              precision: 7
+            bottom:
+              precision: 7
 
-  - algorithm: qgis:creategrid
+  - algorithm: native:creategrid
     name: Create grid (diamond with overlay)
     params:
       CRS: EPSG:4326
@@ -753,8 +808,17 @@ tests:
         compare:
           geometry:
             precision: 7
+          fields:
+            left:
+              precision: 7
+            right:
+              precision: 7
+            top:
+              precision: 7
+            bottom:
+              precision: 7
 
-  - algorithm: qgis:creategrid
+  - algorithm: native:creategrid
     name: Create grid (hexagon with overlay)
     params:
       CRS: EPSG:4326
@@ -771,6 +835,15 @@ tests:
         compare:
           geometry:
             precision: 7
+          fields:
+            left:
+              precision: 7
+            right:
+              precision: 7
+            top:
+              precision: 7
+            bottom:
+              precision: 7
 
   - algorithm: native:deleteholes
     name: Delete holes (no min)

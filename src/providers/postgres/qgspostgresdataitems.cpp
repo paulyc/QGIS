@@ -27,11 +27,6 @@
 #include "qgsvectorlayer.h"
 #include "qgssettings.h"
 #include "providers/gdal/qgsgdaldataitems.h"
-
-#ifdef HAVE_GUI
-#include "qgspgsourceselect.h"
-#endif
-
 #include <QMessageBox>
 #include <climits>
 
@@ -272,9 +267,7 @@ bool QgsPGConnectionItem::handleDrop( const QMimeData *data, const QString &toSc
         uri.setSchema( toSchema );
       }
 
-      QVariantMap options;
-      options.insert( QStringLiteral( "forceSinglePartGeometryType" ), true );
-      std::unique_ptr< QgsVectorLayerExporterTask > exportTask( new QgsVectorLayerExporterTask( srcLayer, uri.uri( false ), QStringLiteral( "postgres" ), srcLayer->crs(), options, owner ) );
+      std::unique_ptr< QgsVectorLayerExporterTask > exportTask( new QgsVectorLayerExporterTask( srcLayer, uri.uri( false ), QStringLiteral( "postgres" ), srcLayer->crs(), QVariantMap(), owner ) );
 
       // when export is successful:
       connect( exportTask.get(), &QgsVectorLayerExporterTask::exportComplete, this, [ = ]()
@@ -343,12 +336,20 @@ QString QgsPGLayerItem::createUri()
     return QString();
   }
 
-  QgsDataSourceUri uri( QgsPostgresConn::connUri( connItem->name() ).connectionInfo( false ) );
+  const QString &connName = connItem->name();
 
-  QStringList defPk( QgsSettings().value(
-                       QStringLiteral( "/PostgreSQL/connections/%1/keys/%2/%3" ).arg( connItem->name(), mLayerProperty.schemaName, mLayerProperty.tableName ),
+  QgsDataSourceUri uri( QgsPostgresConn::connUri( connName ).connectionInfo( false ) );
+
+  const QgsSettings &settings = QgsSettings();
+  QString basekey = QStringLiteral( "/PostgreSQL/connections/%1" ).arg( connName );
+
+  QStringList defPk( settings.value(
+                       QStringLiteral( "%1/keys/%2/%3" ).arg( basekey, mLayerProperty.schemaName, mLayerProperty.tableName ),
                        QVariant( !mLayerProperty.pkCols.isEmpty() ? QStringList( mLayerProperty.pkCols.at( 0 ) ) : QStringList() )
                      ).toStringList() );
+
+  const bool useEstimatedMetadata = QgsPostgresConn::useEstimatedMetadata( connName );
+  uri.setUseEstimatedMetadata( useEstimatedMetadata );
 
   QStringList cols;
   for ( const auto &col : defPk )
@@ -360,6 +361,7 @@ QString QgsPGLayerItem::createUri()
   uri.setWkbType( mLayerProperty.types.at( 0 ) );
   if ( uri.wkbType() != QgsWkbTypes::NoGeometry && mLayerProperty.srids.at( 0 ) != std::numeric_limits<int>::min() )
     uri.setSrid( QString::number( mLayerProperty.srids.at( 0 ) ) );
+
   QgsDebugMsg( QStringLiteral( "layer uri: %1" ).arg( uri.uri( false ) ) );
   return uri.uri( false );
 }
@@ -400,6 +402,7 @@ QVector<QgsDataItem *> QgsPGSchemaItem::createChildren()
   }
 
   bool dontResolveType = QgsPostgresConn::dontResolveType( mConnectionName );
+  bool estimatedMetadata = QgsPostgresConn::useEstimatedMetadata( mConnectionName );
   const auto constLayerProperties = layerProperties;
   for ( QgsPostgresLayerProperty layerProperty : constLayerProperties )
   {
@@ -415,8 +418,7 @@ QVector<QgsDataItem *> QgsPGSchemaItem::createChildren()
         //QgsDebugMsg( QStringLiteral( "skipping column %1.%2 without type constraint" ).arg( layerProperty.schemaName ).arg( layerProperty.tableName ) );
         continue;
       }
-
-      conn->retrieveLayerTypes( layerProperty, true /* useEstimatedMetadata */ );
+      conn->retrieveLayerTypes( layerProperty, estimatedMetadata );
     }
 
     for ( int i = 0; i < layerProperty.size(); i++ )
@@ -550,19 +552,10 @@ QVector<QgsDataItem *> QgsPGRootItem::createChildren()
   return connections;
 }
 
-#ifdef HAVE_GUI
-QWidget *QgsPGRootItem::paramWidget()
-{
-  QgsPgSourceSelect *select = new QgsPgSourceSelect( nullptr, nullptr, QgsProviderRegistry::WidgetMode::Manager );
-  connect( select, &QgsPgSourceSelect::connectionsChanged, this, &QgsPGRootItem::onConnectionsChanged );
-  return select;
-}
-
 void QgsPGRootItem::onConnectionsChanged()
 {
   refresh();
 }
-#endif
 
 QMainWindow *QgsPGRootItem::sMainWindow = nullptr;
 

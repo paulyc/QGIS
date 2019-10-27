@@ -207,6 +207,9 @@ QPolygonF QgsSymbol::_getPolygonRing( QgsRenderContext &context, const QgsCurve 
     mtp.transformInPlace( ptr->rx(), ptr->ry() );
   }
 
+  if ( !poly.empty() && !poly.isClosed() )
+    poly << poly.at( 0 );
+
   return poly;
 }
 
@@ -489,19 +492,32 @@ QColor QgsSymbol::color() const
   return QColor( 0, 0, 0 );
 }
 
-void QgsSymbol::drawPreviewIcon( QPainter *painter, QSize size, QgsRenderContext *customContext )
+void QgsSymbol::drawPreviewIcon( QPainter *painter, QSize size, QgsRenderContext *customContext, bool selected, const QgsExpressionContext *expressionContext )
 {
-  QgsRenderContext context = customContext ? *customContext : QgsRenderContext::fromQPainter( painter );
-  context.setForceVectorOutput( true );
-  QgsSymbolRenderContext symbolContext( context, QgsUnitTypes::RenderUnknownUnit, mOpacity, false, mRenderHints, nullptr );
+  QgsRenderContext *context = customContext;
+  std::unique_ptr< QgsRenderContext > tempContext;
+  if ( !context )
+  {
+    tempContext.reset( new QgsRenderContext( QgsRenderContext::fromQPainter( painter ) ) );
+    context = tempContext.get();
+  }
+
+  const bool prevForceVector = context->forceVectorOutput();
+  context->setForceVectorOutput( true );
+  QgsSymbolRenderContext symbolContext( *context, QgsUnitTypes::RenderUnknownUnit, mOpacity, false, mRenderHints, nullptr );
+  symbolContext.setSelected( selected );
   symbolContext.setOriginalGeometryType( mType == Fill ? QgsWkbTypes::PolygonGeometry : QgsWkbTypes::UnknownGeometry );
 
-  if ( !customContext )
+  if ( !customContext && expressionContext )
+  {
+    context->setExpressionContext( *expressionContext );
+  }
+  else if ( !customContext )
   {
     // if no render context was passed, build a minimal expression context
     QgsExpressionContext expContext;
     expContext.appendScopes( QgsExpressionContextUtils::globalProjectLayerScopes( nullptr ) );
-    context.setExpressionContext( expContext );
+    context->setExpressionContext( expContext );
   }
 
   const auto constMLayers = mLayers;
@@ -515,19 +531,29 @@ void QgsSymbol::drawPreviewIcon( QPainter *painter, QSize size, QgsRenderContext
       // line symbol layer would normally draw just a line
       // so we override this case to force it to draw a polygon stroke
       QgsLineSymbolLayer *lsl = dynamic_cast<QgsLineSymbolLayer *>( layer );
-
       if ( lsl )
       {
         // from QgsFillSymbolLayer::drawPreviewIcon()
         QPolygonF poly = QRectF( QPointF( 0, 0 ), QPointF( size.width() - 1, size.height() - 1 ) );
         lsl->startRender( symbolContext );
-        lsl->renderPolygonStroke( poly, nullptr, symbolContext );
+        QgsPaintEffect *effect = lsl->paintEffect();
+        if ( effect && effect->enabled() )
+        {
+          QgsEffectPainter p( symbolContext.renderContext(), effect );
+          lsl->renderPolygonStroke( poly, nullptr, symbolContext );
+        }
+        else
+        {
+          lsl->renderPolygonStroke( poly, nullptr, symbolContext );
+        }
         lsl->stopRender( symbolContext );
       }
     }
     else
       layer->drawPreviewIcon( symbolContext, size );
   }
+
+  context->setForceVectorOutput( prevForceVector );
 }
 
 void QgsSymbol::exportImage( const QString &path, const QString &format, QSize size )
@@ -571,7 +597,7 @@ QImage QgsSymbol::bigSymbolPreviewImage( QgsExpressionContext *expressionContext
 
   QPainter p( &preview );
   p.setRenderHint( QPainter::Antialiasing );
-  p.translate( 0.5, 0.5 ); // shift by half a pixel to avoid blurring due antialising
+  p.translate( 0.5, 0.5 ); // shift by half a pixel to avoid blurring due antialiasing
 
   if ( mType == QgsSymbol::Marker )
   {

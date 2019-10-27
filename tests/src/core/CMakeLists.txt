@@ -5,6 +5,7 @@ INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_BINARY_DIR}
   ${CMAKE_SOURCE_DIR}/external
   ${CMAKE_SOURCE_DIR}/external/kdbush/include
+  ${CMAKE_SOURCE_DIR}/external/nlohmann
   ${CMAKE_SOURCE_DIR}/src/core
   ${CMAKE_SOURCE_DIR}/src/core/annotations
   ${CMAKE_SOURCE_DIR}/src/core/auth
@@ -27,8 +28,10 @@ INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_SOURCE_DIR}/src/core/raster
   ${CMAKE_SOURCE_DIR}/src/core/scalebar
   ${CMAKE_SOURCE_DIR}/src/core/symbology
+  ${CMAKE_SOURCE_DIR}/src/core/classification
   ${CMAKE_SOURCE_DIR}/src/core/mesh
   ${CMAKE_SOURCE_DIR}/src/test
+
   ${CMAKE_BINARY_DIR}/src/core
 )
 INCLUDE_DIRECTORIES(SYSTEM
@@ -232,12 +235,12 @@ SET(TESTS
  testqgstranslateproject.cpp
  testqobjectuniqueptr.cpp
  testqgspostgresstringutils.cpp
+ testqgsstoredexpressionmanager.cpp
 )
 
 IF(WITH_QTWEBKIT)
   SET(TESTS ${TESTS})
 ENDIF(WITH_QTWEBKIT)
-
 
 IF(HAVE_OPENCL)
   SET(TESTS ${TESTS}

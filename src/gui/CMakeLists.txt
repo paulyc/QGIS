@@ -234,6 +234,7 @@ SET(QGIS_GUI_SRCS
   qgsaggregatetoolbutton.cpp
   qgsalignmentcombobox.cpp
   qgsattributedialog.cpp
+  qgsattributeeditorcontext.cpp
   qgsattributeform.cpp
   qgsattributeformeditorwidget.cpp
   qgsattributeforminterface.cpp
@@ -337,6 +338,7 @@ SET(QGIS_GUI_SRCS
   qgsmaptooladvanceddigitizing.cpp
   qgsmaptoolcapture.cpp
   qgsmaptooledit.cpp
+  qgsmaptooldigitizefeature.cpp
   qgsmaptoolemitpoint.cpp
   qgsmaptoolextent.cpp
   qgsmaptoolidentify.cpp
@@ -522,6 +524,7 @@ SET(QGIS_GUI_MOC_HDRS
   qgsmaptooladvanceddigitizing.h
   qgsmaptoolcapture.h
   qgsmaptooledit.h
+  qgsmaptooldigitizefeature.h
   qgsmaptoolemitpoint.h
   qgsmaptoolextent.h
   qgsmaptoolidentify.h
@@ -1019,12 +1022,14 @@ INCLUDE_DIRECTORIES(
   ${CMAKE_SOURCE_DIR}/src/core/raster
   ${CMAKE_SOURCE_DIR}/src/core/scalebar
   ${CMAKE_SOURCE_DIR}/src/core/symbology
+  ${CMAKE_SOURCE_DIR}/src/core/classification
   ${CMAKE_SOURCE_DIR}/src/core/effects
   ${CMAKE_SOURCE_DIR}/src/core/metadata
   ${CMAKE_SOURCE_DIR}/src/core/expression
   ${CMAKE_SOURCE_DIR}/src/core/validity
   ${CMAKE_SOURCE_DIR}/src/native
   ${CMAKE_SOURCE_DIR}/external
+  ${CMAKE_SOURCE_DIR}/external/nlohmann
 
   ${CMAKE_BINARY_DIR}/src/core
   ${CMAKE_BINARY_DIR}/src/gui
@@ -1121,6 +1126,17 @@ TARGET_LINK_LIBRARIES(qgis_gui
   ${QSCINTILLA_LIBRARY}
   ${Qt5QuickWidgets_LIBRARIES}
 )
+
+IF (FORCE_STATIC_PROVIDERS)
+  INCLUDE_DIRECTORIES(
+    ${CMAKE_SOURCE_DIR}/src/providers/wms
+    ${CMAKE_SOURCE_DIR}/src/providers/postgres
+  )
+  TARGET_LINK_LIBRARIES(qgis_gui
+    wmsprovider_gui_a
+    postgresprovider_gui_a
+  )
+ENDIF (FORCE_STATIC_PROVIDERS)
 
 IF(ENABLE_MODELTEST)
   TARGET_LINK_LIBRARIES(qgis_gui ${Qt5Test_LIBRARIES})

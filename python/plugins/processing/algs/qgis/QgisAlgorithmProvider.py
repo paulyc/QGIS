@@ -57,7 +57,6 @@ from .DefineProjection import DefineProjection
 from .Delaunay import Delaunay
 from .DeleteColumn import DeleteColumn
 from .DeleteDuplicateGeometries import DeleteDuplicateGeometries
-from .DensifyGeometries import DensifyGeometries
 from .EliminateSelection import EliminateSelection
 from .ExecuteSQL import ExecuteSQL
 from .ExportGeometryInfo import ExportGeometryInfo
@@ -69,7 +68,6 @@ from .FieldsMapper import FieldsMapper
 from .FindProjection import FindProjection
 from .GeometryConvert import GeometryConvert
 from .GeometryByExpression import GeometryByExpression
-from .Grid import Grid
 from .Heatmap import Heatmap
 from .Hillshade import Hillshade
 from .HubDistanceLines import HubDistanceLines
@@ -168,7 +166,6 @@ class QgisAlgorithmProvider(QgsProcessingProvider):
                 Delaunay(),
                 DeleteColumn(),
                 DeleteDuplicateGeometries(),
-                DensifyGeometries(),
                 EliminateSelection(),
                 ExecuteSQL(),
                 ExportGeometryInfo(),
@@ -180,7 +177,6 @@ class QgisAlgorithmProvider(QgsProcessingProvider):
                 FindProjection(),
                 GeometryByExpression(),
                 GeometryConvert(),
-                Grid(),
                 Heatmap(),
                 Hillshade(),
                 HubDistanceLines(),

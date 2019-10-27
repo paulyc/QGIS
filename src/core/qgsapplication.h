@@ -40,6 +40,7 @@ class QgsRasterRendererRegistry;
 class QgsGpsConnectionRegistry;
 class QgsDataItemProviderRegistry;
 class QgsPluginLayerRegistry;
+class QgsClassificationMethodRegistry;
 class QgsMessageLog;
 class QgsProcessingRegistry;
 class QgsAnnotationRegistry;
@@ -52,6 +53,8 @@ class QgsNetworkContentFetcherRegistry;
 class QgsValidityCheckRegistry;
 class QTranslator;
 class QgsCalloutRegistry;
+class QgsBookmarkManager;
+class QgsStyleModel;
 
 /**
  * \ingroup core
@@ -122,6 +125,20 @@ class CORE_EXPORT QgsApplication : public QApplication
     Q_OBJECT
 
   public:
+
+    /**
+     * The StyleSheetType enum represents the stylesheet type that
+     * a widget supports.
+     *
+     * Is is used by widgets that display HTML content to retrieve
+     * the standard QGIS stylesheet, maintained according to QGIS
+     * visual guidelines.
+     */
+    enum StyleSheetType
+    {
+      Qt, //! StyleSheet for Qt GUI widgets (based on QLabel or QTextBrowser), supports basic CSS and Qt extensions
+      WebBrowser, //! StyleSheet for embedded browsers (QtWebKit), supports full standard CSS
+    };
 
     static const char *QGIS_ORGANIZATION_NAME;
     static const char *QGIS_ORGANIZATION_DOMAIN;
@@ -460,17 +477,20 @@ class CORE_EXPORT QgsApplication : public QApplication
     static endian_t endian();
 
     /**
-     * Returns a standard css style sheet for reports.
+     * Returns a css style sheet for reports, the \a styleSheetType argument
+     * determines what type of stylesheet is supported by the widget.
      *
      * Typically you will use this method by doing:
      * QString myStyle = QgsApplication::reportStyleSheet();
      * textBrowserReport->document()->setDefaultStyleSheet(myStyle);
+     * if you are using a QgsWebView you will need to manually inject
+     * the CSS into a head -> script tag instead.
      *
-     * \returns QString containing the CSS 2.1 compliant stylesheet.
-     * \note you can use the special Qt extensions too, for example
-     * the gradient fills for backgrounds.
+     * \returns the stylesheet CSS rules.
+     * \note if styleSheetType equals StyleSheetType::Qt you can use the special Qt extensions too,
+     * for example the gradient fills for backgrounds.
      */
-    static QString reportStyleSheet();
+    static QString reportStyleSheet( QgsApplication::StyleSheetType styleSheetType = QgsApplication::StyleSheetType::Qt );
 
     /**
      * Convenience function to get a summary of the paths used in this
@@ -512,7 +532,7 @@ class CORE_EXPORT QgsApplication : public QApplication
      * Sets the GDAL_SKIP environment variable to exclude the specified driver
      * and then calls GDALDriverManager::AutoSkipDrivers() to unregister it. The
      * driver name should be the short format of the Gdal driver name e.g. GTIFF.
-     */
+    */
     static void restoreGdalDriver( const QString &driver );
 
     /**
@@ -525,8 +545,32 @@ class CORE_EXPORT QgsApplication : public QApplication
      * Apply the skipped drivers list to gdal
      * \see skipGdalDriver
      * \see restoreGdalDriver
-     * \see skippedGdalDrivers */
+     * \see skippedGdalDrivers
+     */
     static void applyGdalSkippedDrivers();
+
+    /**
+     * Register gdal drivers, excluding the ones mentioned in "gdal/skipList" setting.
+     * \since QGIS 3.10
+     */
+    static void registerGdalDriversFromSettings();
+
+    /**
+     * Returns the list of gdal drivers that have been disabled in the current session,
+     * and thus, for safety, should not be disabled right now, but at the
+     * next application restart.
+     * \since QGIS 3.10
+     */
+    static QStringList deferredSkippedGdalDrivers() { return sDeferredSkippedGdalDrivers; }
+
+    /**
+     * Sets the list of gdal drivers that should be disabled (\a skippedGdalDrivers),
+     * but excludes for now the ones defines in \a deferredSkippedGdalDrivers.
+     * This writes the "gdal/skipList" setting.
+     * \since QGIS 3.10
+     */
+    static void setSkippedGdalDrivers( const QStringList &skippedGdalDrivers,
+                                       const QStringList &deferredSkippedGdalDrivers );
 
     /**
      * Gets maximum concurrent thread count
@@ -636,6 +680,27 @@ class CORE_EXPORT QgsApplication : public QApplication
      * \since QGIS 3.0
      */
     static QgsPluginLayerRegistry *pluginLayerRegistry() SIP_KEEPREFERENCE;
+
+    /**
+     * Returns the application's classification methods registry, used in graduated renderer
+     * \since QGIS 3.10
+     */
+    static QgsClassificationMethodRegistry *classificationMethodRegistry() SIP_KEEPREFERENCE;
+
+    /**
+     * Returns the application's bookmark manager, used for storing installation-wide bookmarks.
+     * \since QGIS 3.10
+     */
+    static QgsBookmarkManager *bookmarkManager();
+
+    /**
+     * Returns a shared QgsStyleModel containing the default style library (see QgsStyle::defaultStyle()).
+     *
+     * Using this shared model instead of creating a new QgsStyleModel improves performance.
+     *
+     * \since QGIS 3.10
+     */
+    static QgsStyleModel *defaultStyleModel();
 
     /**
      * Returns the application's message log.
@@ -835,6 +900,12 @@ class CORE_EXPORT QgsApplication : public QApplication
     static QStringList ABISYM( mGdalSkipList );
 
     /**
+     * List of gdal drivers that have been disabled in the current session,
+     * and thus, for safety, should not be disabled right now, but at the
+     * next application restart */
+    static QStringList sDeferredSkippedGdalDrivers;
+
+    /**
      * \since QGIS 2.4 */
     static int ABISYM( mMaxThreads );
 
@@ -869,6 +940,7 @@ class CORE_EXPORT QgsApplication : public QApplication
       QgsMessageLog *mMessageLog = nullptr;
       QgsPaintEffectRegistry *mPaintEffectRegistry = nullptr;
       QgsPluginLayerRegistry *mPluginLayerRegistry = nullptr;
+      QgsClassificationMethodRegistry *mClassificationMethodRegistry = nullptr;
       QgsProcessingRegistry *mProcessingRegistry = nullptr;
       QgsProjectStorageRegistry *mProjectStorageRegistry = nullptr;
       QgsPageSizeRegistry *mPageSizeRegistry = nullptr;
@@ -882,6 +954,8 @@ class CORE_EXPORT QgsApplication : public QApplication
       QgsTaskManager *mTaskManager = nullptr;
       QgsLayoutItemRegistry *mLayoutItemRegistry = nullptr;
       QgsUserProfileManager *mUserConfigManager = nullptr;
+      QgsBookmarkManager *mBookmarkManager = nullptr;
+      QgsStyleModel *mStyleModel = nullptr;
       QString mNullRepresentation;
 
       ApplicationMembers();
@@ -896,6 +970,8 @@ class CORE_EXPORT QgsApplication : public QApplication
     static QgsAuthManager *sAuthManager;
 
     static ApplicationMembers *members();
+
+    static void invalidateCaches();
 };
 
 // clazy:excludeall=qstring-allocations

@@ -14,7 +14,7 @@ SET(CMAKE_LINK_DEPENDS_NO_SHARED ON)
 #############################################################
 # Project and version
 SET(CPACK_PACKAGE_VERSION_MAJOR "3")
-SET(CPACK_PACKAGE_VERSION_MINOR "9")
+SET(CPACK_PACKAGE_VERSION_MINOR "11")
 SET(CPACK_PACKAGE_VERSION_PATCH "0")
 SET(COMPLETE_VERSION ${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH})
 SET(RELEASE_NAME "Master")
@@ -43,7 +43,7 @@ IF (USE_OPENCL)
     FIND_PACKAGE(OpenCL)
     IF(${OpenCL_FOUND})
         SET(HAVE_OPENCL TRUE)
-        # Fixup for standard FindOpenCL module not assinging proper framework headers directory
+        # Fixup for standard FindOpenCL module not assigning proper framework headers directory
         IF (APPLE AND "${OpenCL_INCLUDE_DIR}" MATCHES "OpenCL\\.framework/?$")
             SET(OpenCL_INCLUDE_DIR "${OpenCL_INCLUDE_DIR}/Headers" CACHE PATH "" FORCE)
             SET(OpenCL_INCLUDE_DIRS ${OpenCL_INCLUDE_DIR})
@@ -74,17 +74,26 @@ endif(NOT MSVC)
 
 IF (IOS)
     SET (DEFAULT_FORCE_STATIC_LIBS TRUE)
+    SET (DEFAULT_FORCE_STATIC_PROVIDERS TRUE)
 ELSE (IOS)
     SET (DEFAULT_FORCE_STATIC_LIBS FALSE)
+    SET (DEFAULT_FORCE_STATIC_PROVIDERS FALSE)
 ENDIF (IOS)
+
 SET (FORCE_STATIC_LIBS ${DEFAULT_FORCE_STATIC_LIBS} CACHE BOOL "Determines whether libraries should be static only")
 MARK_AS_ADVANCED(FORCE_STATIC_LIBS)
-
-IF(FORCE_STATIC_LIBS)
-  SET(LIBRARY_TYPE STATIC)
+IF (FORCE_STATIC_LIBS)
+  SET (LIBRARY_TYPE STATIC)
 ELSE (FORCE_STATIC_LIBS)
-  SET(LIBRARY_TYPE SHARED)
+  SET (LIBRARY_TYPE SHARED)
 ENDIF (FORCE_STATIC_LIBS)
+
+SET (FORCE_STATIC_PROVIDERS ${DEFAULT_FORCE_STATIC_PROVIDERS} CACHE BOOL "Determines whether data providers should be static only")
+MARK_AS_ADVANCED(FORCE_STATIC_PROVIDERS)
+IF (FORCE_STATIC_PROVIDERS)
+  # following variable is used in qgsconfig.h
+  SET (HAVE_STATIC_PROVIDERS TRUE)
+ENDIF (FORCE_STATIC_PROVIDERS)
 
 # in generated makefiles use relative paths so the project dir is moveable
 # Note commented out since it cause problems but it would be nice to resolve these and enable
@@ -180,7 +189,7 @@ IF(WITH_CORE)
     # The qgis_desktop target is meant to build a minimal but complete running QGIS during development
     # This should help to reduce compile time while still having a "complete enough" QGIS for most of the development
     ADD_CUSTOM_TARGET(qgis_desktop
-    	DEPENDS qgis qgispython pycore pygui pyanalysis postgresprovider staged-plugins pyplugin-installer
+      DEPENDS qgis qgispython pycore pygui pyanalysis postgresprovider staged-plugins pyplugin-installer resources svg doc icons
     )
   ENDIF ()
 
@@ -466,9 +475,9 @@ CONFIGURE_FILE(
   "${CMAKE_SOURCE_DIR}/cmake_templates/CTestCustom.cmake.in"
   "${CMAKE_BINARY_DIR}/CTestCustom.cmake"
   IMMEDIATE @ONLY)
-# For server side testing we have no X, we can use xfvb as a fake x
-# sudo apt-get install xfvb
-add_custom_target(check COMMAND xvfb-run --server-args=-screen\ 10\ 1024x768x24 ctest --output-on-failure)
+# For server side testing we have no X, we can use xvfb as a fake x
+# sudo apt-get install xvfb
+add_custom_target(check COMMAND xvfb-run --server-args=-screen\ 0\ 1024x768x24 ctest --output-on-failure)
 ENDIF(ENABLE_TESTS)
 
 IF (WITH_CORE)
@@ -522,11 +531,23 @@ IF (PEDANTIC)
   ELSE (MSVC)
     # add warnings via flags (not as definitions as on Mac -Wall can not be overridden per language )
     SET(_warnings "-Wall -Wextra -Wno-long-long -Wformat-security -Wno-strict-aliasing")
+
     SET(WERROR FALSE CACHE BOOL "Treat build warnings as errors.")
     IF (WERROR)
       SET(_warnings "${_warnings} -Werror")
     ENDIF(WERROR)
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${_warnings}")
+
+    # c++ only warnings
+
+    # unavoidable - we can't avoid these, as older, supported compilers do not support removing the redundant move
+    SET(_warnings "${_warnings} -Wno-redundant-move")
+
+    IF(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 7.9.999)
+      # heaps of these thrown by Qt headers at the moment (sep 2019)
+      SET(_warnings "${_warnings} -Wno-deprecated-copy")
+    ENDIF(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 7.9.999)
+
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${_warnings}")
 
     # Qt produces lots of warnings with strict aliasing (as of Qt 4.4.0 & GCC 4.3)

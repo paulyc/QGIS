@@ -318,6 +318,7 @@ class LayoutContextSettingsRestorer
       , mPreviousExportLayer( layout->renderContext().currentExportLayer() )
       , mPreviousSimplifyMethod( layout->renderContext().simplifyMethod() )
       , mExportThemes( layout->renderContext().exportThemes() )
+      , mPredefinedScales( layout->renderContext().predefinedScales() )
     {
     }
     Q_NOWARN_DEPRECATED_POP
@@ -332,6 +333,7 @@ class LayoutContextSettingsRestorer
       Q_NOWARN_DEPRECATED_POP
       mLayout->renderContext().setSimplifyMethod( mPreviousSimplifyMethod );
       mLayout->renderContext().setExportThemes( mExportThemes );
+      mLayout->renderContext().setPredefinedScales( mPredefinedScales );
     }
 
     LayoutContextSettingsRestorer( const LayoutContextSettingsRestorer &other ) = delete;
@@ -345,6 +347,7 @@ class LayoutContextSettingsRestorer
     int mPreviousExportLayer = 0;
     QgsVectorSimplifyMethod mPreviousSimplifyMethod;
     QStringList mExportThemes;
+    QVector< double > mPredefinedScales;
 
 };
 ///@endcond PRIVATE
@@ -379,6 +382,7 @@ QgsLayoutExporter::ExportResult QgsLayoutExporter::exportToImage( const QString 
   ( void )dpiRestorer;
   mLayout->renderContext().setDpi( settings.dpi );
   mLayout->renderContext().setFlags( settings.flags );
+  mLayout->renderContext().setPredefinedScales( settings.predefinedMapScales );
 
   QList< int > pages;
   if ( settings.pages.empty() )
@@ -502,7 +506,7 @@ QgsLayoutExporter::ExportResult QgsLayoutExporter::exportToImage( QgsAbstractLay
 
 QgsLayoutExporter::ExportResult QgsLayoutExporter::exportToPdf( const QString &filePath, const QgsLayoutExporter::PdfExportSettings &s )
 {
-  if ( !mLayout )
+  if ( !mLayout || mLayout->pageCollection()->pageCount() == 0 )
     return PrintError;
 
   PdfExportSettings settings = s;
@@ -516,6 +520,7 @@ QgsLayoutExporter::ExportResult QgsLayoutExporter::exportToPdf( const QString &f
   LayoutContextSettingsRestorer contextRestorer( mLayout );
   ( void )contextRestorer;
   mLayout->renderContext().setDpi( settings.dpi );
+  mLayout->renderContext().setPredefinedScales( settings.predefinedMapScales );
 
   if ( settings.simplifyGeometries )
   {
@@ -640,7 +645,8 @@ QgsLayoutExporter::ExportResult QgsLayoutExporter::exportToPdf( const QString &f
     details.useOgcBestPracticeFormatGeoreferencing = settings.useOgcBestPracticeFormatGeoreferencing;
     details.useIso32000ExtensionFormatGeoreferencing = settings.useIso32000ExtensionFormatGeoreferencing;
 
-    geoPdfExporter->finalize( pdfComponents, filePath, details );
+    if ( !geoPdfExporter->finalize( pdfComponents, filePath, details ) )
+      result = PrintError;
   }
   else
   {
@@ -708,6 +714,7 @@ QgsLayoutExporter::ExportResult QgsLayoutExporter::exportToPdf( QgsAbstractLayou
     iterator->layout()->renderContext().setDpi( settings.dpi );
 
     iterator->layout()->renderContext().setFlags( settings.flags );
+    iterator->layout()->renderContext().setPredefinedScales( settings.predefinedMapScales );
 
     if ( settings.simplifyGeometries )
     {
@@ -825,6 +832,7 @@ QgsLayoutExporter::ExportResult QgsLayoutExporter::print( QPrinter &printer, con
   mLayout->renderContext().setDpi( settings.dpi );
 
   mLayout->renderContext().setFlags( settings.flags );
+  mLayout->renderContext().setPredefinedScales( settings.predefinedMapScales );
   // If we are not printing as raster, temporarily disable advanced effects
   // as QPrinter does not support composition modes and can result
   // in items missing from the output
@@ -885,6 +893,7 @@ QgsLayoutExporter::ExportResult QgsLayoutExporter::print( QgsAbstractLayoutItera
     iterator->layout()->renderContext().setDpi( settings.dpi );
 
     iterator->layout()->renderContext().setFlags( settings.flags );
+    iterator->layout()->renderContext().setPredefinedScales( settings.predefinedMapScales );
 
     // If we are not printing as raster, temporarily disable advanced effects
     // as QPrinter does not support composition modes and can result
@@ -943,6 +952,7 @@ QgsLayoutExporter::ExportResult QgsLayoutExporter::exportToSvg( const QString &f
   mLayout->renderContext().setFlags( settings.flags );
   mLayout->renderContext().setFlag( QgsLayoutRenderContext::FlagForceVectorOutput, settings.forceVectorOutput );
   mLayout->renderContext().setTextRenderFormat( s.textRenderFormat );
+  mLayout->renderContext().setPredefinedScales( settings.predefinedMapScales );
 
   if ( settings.simplifyGeometries )
   {
@@ -1177,6 +1187,9 @@ void QgsLayoutExporter::preparePrint( QgsLayout *layout, QPrinter &printer, bool
 
 QgsLayoutExporter::ExportResult QgsLayoutExporter::print( QPrinter &printer )
 {
+  if ( mLayout->pageCollection()->pageCount() == 0 )
+    return PrintError;
+
   preparePrint( mLayout, printer, true );
   QPainter p;
   if ( !p.begin( &printer ) )
@@ -1326,16 +1339,24 @@ void QgsLayoutExporter::appendMetadataToSvg( QDomDocument &svg ) const
 {
   const QgsProjectMetadata &metadata = mLayout->project()->metadata();
   QDomElement metadataElement = svg.createElement( QStringLiteral( "metadata" ) );
-  metadataElement.setAttribute( QStringLiteral( "id" ), QStringLiteral( "qgismetadata" ) );
   QDomElement rdfElement = svg.createElement( QStringLiteral( "rdf:RDF" ) );
+  rdfElement.setAttribute( QStringLiteral( "xmlns:rdf" ), QStringLiteral( "http://www.w3.org/1999/02/22-rdf-syntax-ns#" ) );
+  rdfElement.setAttribute( QStringLiteral( "xmlns:rdfs" ), QStringLiteral( "http://www.w3.org/2000/01/rdf-schema#" ) );
+  rdfElement.setAttribute( QStringLiteral( "xmlns:dc" ), QStringLiteral( "http://purl.org/dc/elements/1.1/" ) );
+  QDomElement descriptionElement = svg.createElement( QStringLiteral( "rdf:Description" ) );
   QDomElement workElement = svg.createElement( QStringLiteral( "cc:Work" ) );
+  workElement.setAttribute( QStringLiteral( "rdf:about" ), QString() );
 
-  auto addTextNode = [&workElement, &svg]( const QString & tag, const QString & value )
+  auto addTextNode = [&workElement, &descriptionElement, &svg]( const QString & tag, const QString & value )
   {
+    // inkscape compatible
     QDomElement element = svg.createElement( tag );
     QDomText t = svg.createTextNode( value );
     element.appendChild( t );
     workElement.appendChild( element );
+
+    // svg spec compatible
+    descriptionElement.setAttribute( tag, value );
   };
 
   addTextNode( QStringLiteral( "dc:format" ), QStringLiteral( "image/svg+xml" ) );
@@ -1344,16 +1365,28 @@ void QgsLayoutExporter::appendMetadataToSvg( QDomDocument &svg ) const
   addTextNode( QStringLiteral( "dc:identifier" ), metadata.identifier() );
   addTextNode( QStringLiteral( "dc:description" ), metadata.abstract() );
 
-  auto addAgentNode = [&workElement, &svg]( const QString & tag, const QString & value )
+  auto addAgentNode = [&workElement, &descriptionElement, &svg]( const QString & tag, const QString & value )
   {
-    QDomElement element = svg.createElement( tag );
+    // inkscape compatible
+    QDomElement inkscapeElement = svg.createElement( tag );
     QDomElement agentElement = svg.createElement( QStringLiteral( "cc:Agent" ) );
     QDomElement titleElement = svg.createElement( QStringLiteral( "dc:title" ) );
     QDomText t = svg.createTextNode( value );
     titleElement.appendChild( t );
     agentElement.appendChild( titleElement );
-    element.appendChild( agentElement );
-    workElement.appendChild( element );
+    inkscapeElement.appendChild( agentElement );
+    workElement.appendChild( inkscapeElement );
+
+    // svg spec compatible
+    QDomElement bagElement = svg.createElement( QStringLiteral( "rdf:Bag" ) );
+    QDomElement liElement = svg.createElement( QStringLiteral( "rdf:li" ) );
+    t = svg.createTextNode( value );
+    liElement.appendChild( t );
+    bagElement.appendChild( liElement );
+
+    QDomElement element = svg.createElement( tag );
+    element.appendChild( bagElement );
+    descriptionElement.appendChild( element );
   };
 
   addAgentNode( QStringLiteral( "dc:creator" ), metadata.author() );
@@ -1377,11 +1410,14 @@ void QgsLayoutExporter::appendMetadataToSvg( QDomDocument &svg ) const
     }
     element.appendChild( bagElement );
     workElement.appendChild( element );
+    descriptionElement.appendChild( element );
   }
 
+  rdfElement.appendChild( descriptionElement );
   rdfElement.appendChild( workElement );
   metadataElement.appendChild( rdfElement );
   svg.documentElement().appendChild( metadataElement );
+  svg.documentElement().setAttribute( QStringLiteral( "xmlns:cc" ), QStringLiteral( "http://creativecommons.org/ns#" ) );
 }
 
 std::unique_ptr<double[]> QgsLayoutExporter::computeGeoTransform( const QgsLayoutItemMap *map, const QRectF &region, double dpi ) const

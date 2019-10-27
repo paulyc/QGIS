@@ -397,7 +397,11 @@ class Repositories(QObject):
                     fileName = pluginNodes.item(i).firstChildElement("file_name").text().strip()
                     if not fileName:
                         fileName = QFileInfo(pluginNodes.item(i).firstChildElement("download_url").text().strip().split("?")[0]).fileName()
-                    name = fileName.partition(".")[0]
+                    match = re.match('(.*?)[.-]', fileName)
+                    if match:
+                        name = match.groups()[0]
+                    else:
+                        name = fileName
                     experimental = False
                     if pluginNodes.item(i).firstChildElement("experimental").text().strip().upper() in ["TRUE", "YES"]:
                         experimental = True
@@ -409,7 +413,9 @@ class Repositories(QObject):
                         trusted = True
                     icon = pluginNodes.item(i).firstChildElement("icon").text().strip()
                     if icon and not icon.startswith("http"):
-                        icon = "http://{}/{}".format(QUrl(self.mRepositories[reposName]["url"]).host(), icon)
+                        url = QUrl(self.mRepositories[reposName]["url"])
+                        if url.scheme() in ('http', 'https'):
+                            icon = "{}://{}/{}".format(url.scheme(), url.host(), icon)
 
                     if pluginNodes.item(i).toElement().hasAttribute("plugin_id"):
                         plugin_id = pluginNodes.item(i).toElement().attribute("plugin_id")

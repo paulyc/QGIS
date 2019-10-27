@@ -41,6 +41,7 @@
 #include "qgssymbollayerutils.h"
 #include "callouts/qgscalloutsregistry.h"
 #include "qgspluginlayerregistry.h"
+#include "classification/qgsclassificationmethodregistry.h"
 #include "qgsmessagelog.h"
 #include "qgsannotationregistry.h"
 #include "qgssettings.h"
@@ -55,6 +56,8 @@
 #include "qgsprojutils.h"
 #include "qgsvaliditycheckregistry.h"
 #include "qgsnewsfeedparser.h"
+#include "qgsbookmarkmanager.h"
+#include "qgsstylemodel.h"
 
 #include "gps/qgsgpsconnectionregistry.h"
 #include "processing/qgsprocessingregistry.h"
@@ -125,6 +128,7 @@ QString ABISYM( QgsApplication::mCfgIntDir );
 #endif
 QString ABISYM( QgsApplication::mBuildOutputPath );
 QStringList ABISYM( QgsApplication::mGdalSkipList );
+QStringList QgsApplication::sDeferredSkippedGdalDrivers;
 int ABISYM( QgsApplication::mMaxThreads );
 QString ABISYM( QgsApplication::mAuthDbDirPath );
 
@@ -233,7 +237,7 @@ void QgsApplication::init( QString profileFolder )
 #else
     setPluginPath( ABISYM( mBuildOutputPath ) + '/' + QStringLiteral( QGIS_PLUGIN_SUBDIR ) );
 #endif
-    setPkgDataPath( ABISYM( mBuildSourcePath ) ); // directly source path - used for: doc, resources, svg
+    setPkgDataPath( ABISYM( mBuildOutputPath ) + QStringLiteral( "/data" ) ); // in buildDir/data - used for: doc, resources, svg
     ABISYM( mLibraryPath ) = ABISYM( mBuildOutputPath ) + '/' + QGIS_LIB_SUBDIR + '/';
 #if defined(_MSC_VER) && !defined(USING_NMAKE) && !defined(USING_NINJA)
     ABISYM( mLibexecPath ) = ABISYM( mBuildOutputPath ) + '/' + QGIS_LIBEXEC_SUBDIR + '/' + ABISYM( mCfgIntDir ) + '/';
@@ -335,6 +339,9 @@ void QgsApplication::init( QString profileFolder )
   colorSchemeRegistry()->addDefaultSchemes();
   colorSchemeRegistry()->initStyleScheme();
 
+  bookmarkManager()->initialize( QgsApplication::qgisSettingsDirPath() + "/bookmarks.xml" );
+  members()->mStyleModel = new QgsStyleModel( QgsStyle::defaultStyle() );
+
   ABISYM( mInitialized ) = true;
 }
 
@@ -345,15 +352,20 @@ QgsApplication::~QgsApplication()
   delete mQgisTranslator;
   delete mQtTranslator;
 
-  // invalidate coordinate cache while the PROJ context held by the thread-locale
-  // QgsProjContextStore object is still alive. Otherwise if this later object
-  // is destroyed before the static variables of the cache, we might use freed memory.
-
   // we do this here as well as in exitQgis() -- it's safe to call as often as we want,
   // and there's just a *chance* that someone hasn't properly called exitQgis prior to
   // this destructor...
+  invalidateCaches();
+}
+
+void QgsApplication::invalidateCaches()
+{
+  // invalidate coordinate cache while the PROJ context held by the thread-locale
+  // QgsProjContextStore object is still alive. Otherwise if this later object
+  // is destroyed before the static variables of the cache, we might use freed memory.
   QgsCoordinateTransform::invalidateCache( true );
   QgsCoordinateReferenceSystem::invalidateCache( true );
+  QgsEllipsoidUtils::invalidateCache( true );
 }
 
 QgsApplication *QgsApplication::instance()
@@ -478,7 +490,9 @@ void QgsApplication::setPluginPath( const QString &pluginPath )
 void QgsApplication::setPkgDataPath( const QString &pkgDataPath )
 {
   ABISYM( mPkgDataPath ) = pkgDataPath;
-  QString mySvgPath = pkgDataPath + ( ABISYM( mRunningFromBuildDir ) ? "/images/svg/" : "/svg/" );
+
+  QString mySvgPath = pkgDataPath + QStringLiteral( "/svg/" );
+
   // avoid duplicate entries
   if ( !ABISYM( mDefaultSvgPaths ).contains( mySvgPath ) )
     ABISYM( mDefaultSvgPaths ) << mySvgPath;
@@ -500,6 +514,7 @@ void QgsApplication::setAuthDatabaseDirPath( const QString &authDbDirPath )
 
 QString QgsApplication::prefixPath()
 {
+#if 0
   if ( ABISYM( mRunningFromBuildDir ) )
   {
     static bool sOnce = true;
@@ -511,6 +526,7 @@ QString QgsApplication::prefixPath()
     }
     sOnce = false;
   }
+#endif
 
   return ABISYM( mPrefixPath );
 }
@@ -518,6 +534,7 @@ QString QgsApplication::pluginPath()
 {
   return ABISYM( mPluginPath );
 }
+
 QString QgsApplication::pkgDataPath()
 {
   if ( ABISYM( mPkgDataPath ).isNull() )
@@ -525,6 +542,7 @@ QString QgsApplication::pkgDataPath()
   else
     return ABISYM( mPkgDataPath );
 }
+
 QString QgsApplication::defaultThemePath()
 {
   return QStringLiteral( ":/images/themes/default/" );
@@ -752,7 +770,7 @@ QString QgsApplication::resolvePkgPath()
   }
 
   if ( ABISYM( mRunningFromBuildDir ) )
-    return ABISYM( mBuildSourcePath );
+    return ABISYM( mBuildOutputPath ) + QStringLiteral( "/data" );
   else
     return prefixPath + '/' + QStringLiteral( QGIS_DATA_SUBDIR );
 }
@@ -966,9 +984,9 @@ QString QgsApplication::srsDatabaseFilePath()
     if ( !QFile( tempCopy ).exists() )
     {
 #if PROJ_VERSION_MAJOR>=6
-      QFile f( pkgDataPath() + "/resources/srs6.db" );
+      QFile f( buildSourcePath() + "/resources/srs6.db" );
 #else
-      QFile f( pkgDataPath() + "/resources/srs.db" );
+      QFile f( buildSourcePath() + "/resources/srs.db" );
 #endif
       if ( !f.copy( tempCopy ) )
       {
@@ -989,12 +1007,11 @@ QStringList QgsApplication::svgPaths()
   //local directories to search when looking for an SVG with a given basename
   //defined by user in options dialog
   QgsSettings settings;
-  QStringList pathList = settings.value( QStringLiteral( "svg/searchPathsForSVG" ) ).toStringList();
+  const QStringList pathList = settings.value( QStringLiteral( "svg/searchPathsForSVG" ) ).toStringList();
 
   // maintain user set order while stripping duplicates
   QStringList paths;
-  const auto constPathList = pathList;
-  for ( const QString &path : constPathList )
+  for ( const QString &path : pathList )
   {
     if ( !paths.contains( path ) )
       paths.append( path );
@@ -1236,6 +1253,9 @@ QgsAuthManager *QgsApplication::authManager()
 
 void QgsApplication::exitQgis()
 {
+  // make sure all threads are done before exiting
+  QThreadPool::globalInstance()->waitForDone();
+
   // don't create to delete
   if ( instance() )
     delete instance()->mAuthManager;
@@ -1256,11 +1276,7 @@ void QgsApplication::exitQgis()
   if ( QgsProviderRegistry::exists() )
     delete QgsProviderRegistry::instance();
 
-  // invalidate coordinate cache AND DISABLE THEM! while the PROJ context held by the thread-locale
-  // QgsProjContextStore object is still alive. Otherwise if this later object
-  // is destroyed before the static variables of the cache, we might use freed memory.
-  QgsCoordinateTransform::invalidateCache( true );
-  QgsCoordinateReferenceSystem::invalidateCache( true );
+  invalidateCaches();
 
   QgsStyle::cleanDefaultStyle();
 
@@ -1296,103 +1312,153 @@ QString QgsApplication::showSettings()
   return myState;
 }
 
-QString QgsApplication::reportStyleSheet()
+QString QgsApplication::reportStyleSheet( QgsApplication::StyleSheetType styleSheetType )
 {
   //
-  // Make the style sheet desktop preferences aware by using qappliation
+  // Make the style sheet desktop preferences aware by using qapplication
   // palette as a basis for colors where appropriate
   //
-//  QColor myColor1 = palette().highlight().color();
+  //  QColor myColor1 = palette().highlight().color();
   QColor myColor1( Qt::lightGray );
   QColor myColor2 = myColor1;
   myColor2 = myColor2.lighter( 110 ); //10% lighter
   QString myStyle;
-  myStyle = ".overview{"
-            "  font: 1.82em;"
-            "  font-weight: bold;"
-            "}"
-            "body{"
-            "  background: white;"
-            "  color: black;"
-            "  font-family: 'Lato', 'Ubuntu', 'Lucida Grande', 'Segoe UI', 'Arial', sans-serif;"
-            "  width: 100%;"
-            "}"
-            "h1{  background-color: #F6F6F6;"
-            "  color: #589632; " // from http://qgis.org/en/site/getinvolved/styleguide.html
-            "  font-size: x-large;  "
-            "  font-weight: normal;"
-            "  background: none;"
-            "  padding: 0.75em 0 0;"
-            "  margin: 0;"
-            "  line-height: 3em;"
-            "}"
-            "h2{  background-color: #F6F6F6;"
-            "  color: #589632; "  // from http://qgis.org/en/site/getinvolved/styleguide.html
-            "  font-size: medium;  "
-            "  font-weight: normal;"
-            "  background: none;"
-            "  padding: 0.75em 0 0;"
-            "  margin: 0;"
-            "  line-height: 1.1em;"
-            "}"
-            "h3{  background-color: #F6F6F6;"
-            "  color: #93b023;"  // from http://qgis.org/en/site/getinvolved/styleguide.html
-            "  font-weight: bold;"
-            "  font-size: large;"
-            "  text-align: right;"
-            "  border-bottom: 5px solid #DCEB5C;"
-            "}"
-            "h4{  background-color: #F6F6F6;"
-            "  color: #93b023;"  // from http://qgis.org/en/site/getinvolved/styleguide.html
-            "  font-weight: bold;"
-            "  font-size: medium;"
-            "  text-align: right;"
-            "}"
-            "h5{    background-color: #F6F6F6;"
-            "   color: #93b023;"  // from http://qgis.org/en/site/getinvolved/styleguide.html
-            "   font-weight: bold;"
-            "   font-size: small;"
-            "   text-align: right;"
-            "}"
-            "a{  color: #729FCF;"
-            "  font-family: arial,sans-serif;"
-            "}"
-            "label{  background-color: #FFFFCC;"
-            "  border: 1px solid black;"
-            "  margin: 1px;"
-            "  padding: 0px 3px; "
-            "  font-size: small;"
-            "}"
-            ".section {"
-            "  font-weight: bold;"
-            "  padding-top:25px;"
-            "}"
-            ".list-view .highlight {"
-            "  text-align: right;"
-            "  border: 0px;"
-            "  width: 20%;"
-            "  padding-right: 15px;"
-            "  padding-left: 20px;"
-            "  font-weight: bold;"
-            "}"
-            "th .strong {"
-            "  font-weight: bold;"
-            "}"
-            ".tabular-view{ "
-            "  border-collapse: collapse;"
-            "  width: 95%;"
-            "}"
-            ".tabular-view th, .tabular-view td { "
-            "  border:10px solid black;"
-            "}"
-            ".tabular-view .odd-row{"
-            "  background-color: #f9f9f9;"
-            "}"
-            "hr {"
-            "  border: 0;"
-            "  height: 0;"
-            "  border-top: 1px solid black;"
-            "}";
+  myStyle = QStringLiteral( ".overview{"
+                            "  font: 1.82em;"
+                            "  font-weight: bold;"
+                            "}"
+                            "body{"
+                            "  background: white;"
+                            "  color: black;"
+                            "  font-family: 'Lato', 'Ubuntu', 'Lucida Grande', 'Segoe UI', 'Arial', sans-serif;"
+                            "  width: 100%;"
+                            "}"
+                            "h1{  background-color: #F6F6F6;"
+                            "  color: #589632; " // from http://qgis.org/en/site/getinvolved/styleguide.html
+                            "  font-size: x-large;  "
+                            "  font-weight: normal;"
+                            "  background: none;"
+                            "  padding: 0.75em 0 0;"
+                            "  margin: 0;"
+                            "  line-height: 3em;"
+                            "}"
+                            "h2{  background-color: #F6F6F6;"
+                            "  color: #589632; "  // from http://qgis.org/en/site/getinvolved/styleguide.html
+                            "  font-size: medium;  "
+                            "  font-weight: normal;"
+                            "  background: none;"
+                            "  padding: 0.75em 0 0;"
+                            "  margin: 0;"
+                            "  line-height: 1.1em;"
+                            "}"
+                            "h3{  background-color: #F6F6F6;"
+                            "  color: #93b023;"  // from http://qgis.org/en/site/getinvolved/styleguide.html
+                            "  font-weight: bold;"
+                            "  font-size: large;"
+                            "  text-align: right;"
+                            "  border-bottom: 5px solid #DCEB5C;"
+                            "}"
+                            "h4{  background-color: #F6F6F6;"
+                            "  color: #93b023;"  // from http://qgis.org/en/site/getinvolved/styleguide.html
+                            "  font-weight: bold;"
+                            "  font-size: medium;"
+                            "  text-align: right;"
+                            "}"
+                            "h5{    background-color: #F6F6F6;"
+                            "   color: #93b023;"  // from http://qgis.org/en/site/getinvolved/styleguide.html
+                            "   font-weight: bold;"
+                            "   font-size: small;"
+                            "   text-align: right;"
+                            "}"
+                            "a{  color: #729FCF;"
+                            "  font-family: arial,sans-serif;"
+                            "}"
+                            "label{  background-color: #FFFFCC;"
+                            "  border: 1px solid black;"
+                            "  margin: 1px;"
+                            "  padding: 0px 3px; "
+                            "  font-size: small;"
+                            "}"
+                            "th .strong {"
+                            "  font-weight: bold;"
+                            "}"
+                            "hr {"
+                            "  border: 0;"
+                            "  height: 0;"
+                            "  border-top: 1px solid black;"
+                            "}"
+                            ".list-view .highlight {"
+                            "  text-align: right;"
+                            "  border: 0px;"
+                            "  width: 20%;"
+                            "  padding-right: 15px;"
+                            "  padding-left: 20px;"
+                            "  font-weight: bold;"
+                            "}"
+                            ".tabular-view .odd-row {"
+                            "  background-color: #f9f9f9;"
+                            "}"
+                            ".section {"
+                            "  font-weight: bold;"
+                            "  padding-top:25px;"
+                            "}" );
+
+  // We have some subtle differences between Qt based style and QWebKit style
+  switch ( styleSheetType )
+  {
+    case StyleSheetType::Qt:
+      myStyle += QStringLiteral(
+                   ".tabular-view{ "
+                   "  border-collapse: collapse;"
+                   "  width: 95%;"
+                   "}"
+                   ".tabular-view th, .tabular-view td { "
+                   "  border:10px solid black;"
+                   "}" );
+      break;
+
+    case StyleSheetType::WebBrowser:
+      myStyle += QStringLiteral(
+                   "body { "
+                   "   margin: auto;"
+                   "   width: 97%;"
+                   "}"
+                   "table.tabular-view, table.list-view { "
+                   "   border-collapse: collapse;"
+                   "   table-layout:fixed;"
+                   "   width: 100% !important;"
+                   "}"
+                   // Override
+                   "h1 { "
+                   "   line-height: inherit;"
+                   "}"
+                   "td, th {"
+                   "   word-wrap: break-word; "
+                   "   vertical-align: top;"
+                   "}"
+                   // Set first column width
+                   ".list-view th:first-child, .list-view td:first-child {"
+                   "   width: 15%;"
+                   "}"
+                   ".list-view.highlight { "
+                   "   padding-left: inherit; "
+                   "}"
+                   // Set first column width for inner tables
+                   ".tabular-view th:first-child, .tabular-view td:first-child { "
+                   "   width: 20%; "
+                   "}"
+                   // Makes titles bg stand up
+                   ".tabular-view th.strong { "
+                   "   background-color: #eee; "
+                   "}"
+                   // Give some visual appearance to those ugly nested tables
+                   ".tabular-view th, .tabular-view td { "
+                   "   border: solid 1px #eee;"
+                   "}"
+                 );
+      break;
+  }
+
   return myStyle;
 }
 
@@ -1543,10 +1609,41 @@ void QgsApplication::restoreGdalDriver( const QString &driver )
   applyGdalSkippedDrivers();
 }
 
+void QgsApplication::setSkippedGdalDrivers( const QStringList &skippedGdalDrivers,
+    const QStringList &deferredSkippedGdalDrivers )
+{
+  ABISYM( mGdalSkipList ) = skippedGdalDrivers;
+  sDeferredSkippedGdalDrivers = deferredSkippedGdalDrivers;
+
+  QgsSettings settings;
+  settings.setValue( QStringLiteral( "gdal/skipList" ), skippedGdalDrivers.join( QStringLiteral( " " ) ) );
+
+  applyGdalSkippedDrivers();
+}
+
+void QgsApplication::registerGdalDriversFromSettings()
+{
+  QgsSettings settings;
+  QString joinedList = settings.value( QStringLiteral( "gdal/skipList" ), QString() ).toString();
+  QStringList myList;
+  if ( !joinedList.isEmpty() )
+  {
+    myList = joinedList.split( ' ' );
+  }
+  ABISYM( mGdalSkipList ) = myList;
+  applyGdalSkippedDrivers();
+}
+
 void QgsApplication::applyGdalSkippedDrivers()
 {
   ABISYM( mGdalSkipList ).removeDuplicates();
-  QString myDriverList = ABISYM( mGdalSkipList ).join( QStringLiteral( " " ) );
+  QStringList realDisabledDriverList;
+  for ( const auto &driverName : ABISYM( mGdalSkipList ) )
+  {
+    if ( !sDeferredSkippedGdalDrivers.contains( driverName ) )
+      realDisabledDriverList << driverName;
+  }
+  QString myDriverList = realDisabledDriverList.join( ' ' );
   QgsDebugMsg( QStringLiteral( "Gdal Skipped driver list set to:" ) );
   QgsDebugMsg( myDriverList );
   CPLSetConfigOption( "GDAL_SKIP", myDriverList.toUtf8() );
@@ -1920,6 +2017,21 @@ QgsPluginLayerRegistry *QgsApplication::pluginLayerRegistry()
   return members()->mPluginLayerRegistry;
 }
 
+QgsClassificationMethodRegistry *QgsApplication::classificationMethodRegistry()
+{
+  return members()->mClassificationMethodRegistry;
+}
+
+QgsBookmarkManager *QgsApplication::bookmarkManager()
+{
+  return members()->mBookmarkManager;
+}
+
+QgsStyleModel *QgsApplication::defaultStyleModel()
+{
+  return members()->mStyleModel;
+}
+
 QgsMessageLog *QgsApplication::messageLog()
 {
   return members()->mMessageLog;
@@ -1983,10 +2095,13 @@ QgsApplication::ApplicationMembers::ApplicationMembers()
   mProjectStorageRegistry = new QgsProjectStorageRegistry();
   mNetworkContentFetcherRegistry = new QgsNetworkContentFetcherRegistry();
   mValidityCheckRegistry = new QgsValidityCheckRegistry();
+  mClassificationMethodRegistry = new QgsClassificationMethodRegistry();
+  mBookmarkManager = new QgsBookmarkManager( nullptr );
 }
 
 QgsApplication::ApplicationMembers::~ApplicationMembers()
 {
+  delete mStyleModel;
   delete mValidityCheckRegistry;
   delete mActionScopeRegistry;
   delete m3DRendererRegistry;
@@ -2010,6 +2125,8 @@ QgsApplication::ApplicationMembers::~ApplicationMembers()
   delete mSymbolLayerRegistry;
   delete mTaskManager;
   delete mNetworkContentFetcherRegistry;
+  delete mClassificationMethodRegistry;
+  delete mBookmarkManager;
 }
 
 QgsApplication::ApplicationMembers *QgsApplication::members()

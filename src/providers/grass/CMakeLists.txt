@@ -10,6 +10,7 @@ INCLUDE_DIRECTORIES(
   ${CMAKE_SOURCE_DIR}/src/core/raster
   ${CMAKE_SOURCE_DIR}/src/gui
   ${CMAKE_SOURCE_DIR}/external
+  ${CMAKE_SOURCE_DIR}/external/nlohmann
 
   ${CMAKE_BINARY_DIR}/src/core
   ${CMAKE_BINARY_DIR}/src/gui
@@ -186,6 +187,7 @@ MACRO(ADD_GRASSLIB GRASS_BUILD_VERSION)
       TARGET_LINK_LIBRARIES(grassprovider${GRASS_BUILD_VERSION}
         qgis_gui
       )
+      ADD_DEPENDENCIES(grassprovider${GRASS_BUILD_VERSION} ui)
     ENDIF ()
 
     #

@@ -577,7 +577,7 @@ void QgsPluginRegistry::restoreSessionPlugins( const QString &pluginDirString )
     // start - temporary fix for issue #5879, more above
     if ( QgsApplication::isRunningFromBuildDir() )
     {
-      QgsApplication::setPkgDataPath( QgsApplication::buildSourcePath() );
+      QgsApplication::setPkgDataPath( QgsApplication::buildOutputPath() + QStringLiteral( "/data" ) );
     }
     // end - temporary fix for issue #5879
   }
@@ -616,7 +616,7 @@ bool QgsPluginRegistry::checkPythonPlugin( const QString &packageName )
   QString pluginName, description, /*category,*/ version;
 
   // get information from the plugin
-  // if there are some problems, don't continue with metadata retreival
+  // if there are some problems, don't continue with metadata retrieval
   pluginName  = mPythonUtils->getPluginMetadata( packageName, QStringLiteral( "name" ) );
   description = mPythonUtils->getPluginMetadata( packageName, QStringLiteral( "description" ) );
   version     = mPythonUtils->getPluginMetadata( packageName, QStringLiteral( "version" ) );

@@ -101,13 +101,7 @@ qgis:createconstantrasterlayer: >
   Given an input raster layer and a value, this algorithm generates a new layer with the same extent and cell size as the input one, and all cells with the specified value.
 
 qgis:creategrid: >
-  This algorithm creates a vector layer with a grid covering a given extent. Elements in the grid can be points, lines or polygons.
-
-  The size and/or placement of each element in the grid is defined using a horizontal and vertical spacing.
-
-  The CRS of the output layer must be defined. The grid extent and the spacing values must be expressed in the coordinates and units of this CRS.
-
-  The top-left point (minX, maxY) is used as the reference point. That means that, at that point, an element is guaranteed to be placed. Unless the width and height of the selected extent is a multiple of the selected spacing, that is not true for the other points that define that extent.
+  This algorithm creates a vector layer with a grid covering a given extent. Elements in the grid can be points, lines or polygons.The size and/or placement of each element in the grid is defined using a horizontal and vertical spacing. The CRS of the output layer must be defined. The grid extent and the spacing values must be expressed in the coordinates and units of this CRS. The top-left point (minX, maxY) is used as the reference point. That means that, at that point, an element is guaranteed to be placed. Unless the width and height of the selected extent is a multiple of the selected spacing, that is not true for the other points that define that extent.
 
 qgis:createspatialindex: >
   Creates an index to speed up access to the features in a layer based on their spatial location. Support for spatial index creation is dependent on the layer's data provider.
@@ -133,13 +127,6 @@ qgis:deleteholes: >
   This algorithm takes a polygon layer and removes holes in polygons. It creates a new vector layer in which polygons with holes have been replaced by polygons with only their external ring. Attributes are not modified.
 
   An optional minimum area parameter allows removing only holes which are smaller than a specified area threshold. Leaving this parameter as 0.0 results in all holes being removed.
-
-qgis:densifygeometries: >
-  This algorithm takes a polygon or line layer and generates a new one in which the geometries have a larger number of vertices than the original one.
-
-  If the geometries have z or m values present then these will be linearly interpolated at the added nodes.
-
-  The number of new vertices to add to each feature geometry is specified as an input parameter.
 
 qgis:densifygeometriesgivenaninterval: >
   This algorithm takes a polygon or line layer and generates a new one in which the geometries have a larger number of vertices than the original one. The geometries are densified by adding regularly placed extra nodes inside each segment so that the maximum distance between any two nodes does not exceed the specified distance.

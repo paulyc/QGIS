@@ -6,7 +6,7 @@ set -e
 # Setup ccache
 ##############
 export CCACHE_TEMPDIR=/tmp
-ccache -M 1G
+ccache -M 1.2G
 
 # Temporarily uncomment to debug ccache issues
 # export CCACHE_LOGFILE=/tmp/cache.debug
@@ -43,6 +43,7 @@ cmake \
  -DSUPPRESS_QT_WARNINGS=ON \
  -DENABLE_MODELTEST=ON \
  -DENABLE_PGTEST=ON \
+ -DENABLE_SAGA_TESTS=ON \
  -DENABLE_MSSQLTEST=ON \
  -DWITH_QSPATIALITE=ON \
  -DWITH_QWTPOLAR=OFF \

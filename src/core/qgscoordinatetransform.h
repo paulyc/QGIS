@@ -455,6 +455,15 @@ class CORE_EXPORT QgsCoordinateTransform
      */
     double scaleFactor( const QgsRectangle &referenceExtent ) const;
 
+#ifdef SIP_RUN
+    SIP_PYOBJECT __repr__();
+    % MethodCode
+    QString str = QStringLiteral( "<QgsCoordinateTransform: %1 to %2>" ).arg( sipCpp->sourceCrs().isValid() ? sipCpp->sourceCrs().authid() : QStringLiteral( "NULL" ),
+                  sipCpp->destinationCrs().isValid() ? sipCpp->destinationCrs().authid() : QStringLiteral( "NULL" ) );
+    sipRes = PyUnicode_FromString( str.toUtf8().constData() );
+    % End
+#endif
+
 #ifndef SIP_RUN
 
     /**
@@ -527,6 +536,15 @@ class CORE_EXPORT QgsCoordinateTransform
         const QgsDatumTransform::TransformDetails &desiredOperation )> &handler );
 #endif
 
+#ifndef SIP_RUN
+#if PROJ_VERSION_MAJOR>=6
+  protected:
+    friend class QgsProjContext;
+
+    // Only meant to be called by QgsProjContext::~QgsProjContext()
+    static void removeFromCacheObjectsBelongingToCurrentThread( void *pj_context );
+#endif
+#endif
   private:
 
     mutable QExplicitlySharedDataPointer<QgsCoordinateTransformPrivate> d;

@@ -29,6 +29,7 @@ class QgsFeatureRequest;
 class QSignalMapper;
 class QgsMapLayerAction;
 class QgsScrollArea;
+class QgsFieldConditionalFormatWidget;
 
 /**
  * \ingroup gui
@@ -81,6 +82,7 @@ class GUI_EXPORT QgsDualView : public QStackedWidget, private Ui::QgsDualViewBas
      * \param parent  The parent widget
      */
     explicit QgsDualView( QWidget *parent SIP_TRANSFERTHIS = nullptr );
+    ~QgsDualView() override;
 
     /**
      * Has to be called to initialize the dual view.
@@ -387,6 +389,7 @@ class GUI_EXPORT QgsDualView : public QStackedWidget, private Ui::QgsDualViewBas
     void updateEditSelectionProgress( int progress, int count );
     void panOrZoomToFeature( const QgsFeatureIds &featureset );
 
+    QgsFieldConditionalFormatWidget *mConditionalFormatWidget = nullptr;
     QgsAttributeEditorContext mEditorContext;
     QgsAttributeTableModel *mMasterModel = nullptr;
     QgsAttributeTableFilterModel *mFilterModel = nullptr;

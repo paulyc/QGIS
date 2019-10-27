@@ -105,6 +105,7 @@ typedef SInt32 SRefCon;
 #include "qgsversionmigration.h"
 #include "qgsfirstrundialog.h"
 #include "qgsproxystyle.h"
+#include "qgsmessagebar.h"
 
 #include "qgsuserprofilemanager.h"
 #include "qgsuserprofile.h"
@@ -385,9 +386,13 @@ void myMessageOutput( QtMsgType type, const char *msg )
       break;
     case QtWarningMsg:
     {
-      // Ignore libpng iCPP known incorrect SRGB profile errors
-      // (which are thrown by 3rd party components we have no control over and have low value anyway).
-      if ( strncmp( msg, "libpng warning: iCCP: known incorrect sRGB profile", 50 ) == 0 )
+      /* Ignore:
+       * - libpng iCPP known incorrect SRGB profile errors (which are thrown by 3rd party components
+       *  we have no control over and have low value anyway);
+       * - QtSVG warnings with regards to lack of implementation beyond Tiny SVG 1.2
+       */
+      if ( strncmp( msg, "libpng warning: iCCP: known incorrect sRGB profile", 50 ) == 0 ||
+           strstr( msg, "Could not add child element to parent element because the types are incorrect" ) )
         break;
 
       myPrint( "Warning: %s\n", msg );
@@ -395,11 +400,22 @@ void myMessageOutput( QtMsgType type, const char *msg )
 #ifdef QGISDEBUG
       // Print all warnings except setNamedColor.
       // Only seems to happen on windows
-      if ( 0 != strncmp( msg, "QColor::setNamedColor: Unknown color name 'param", 48 ) )
+      if ( 0 != strncmp( msg, "QColor::setNamedColor: Unknown color name 'param", 48 ) &&
+           0 != strncmp( msg, "Trying to create a QVariant instance of QMetaType::Void type, an invalid QVariant will be constructed instead", 109 ) &&
+           0 != strncmp( msg, "Logged warning", 14 ) )
       {
         // TODO: Verify this code in action.
         dumpBacktrace( 20 );
-        QgsMessageLog::logMessage( msg, QStringLiteral( "Qt" ) );
+
+        // also be super obnoxious -- we DON'T want to allow these errors to be ignored!!
+        if ( QgisApp::instance() && QgisApp::instance()->messageBar() && QgisApp::instance()->thread() == QThread::currentThread() )
+        {
+          QgisApp::instance()->messageBar()->pushCritical( QStringLiteral( "Qt" ), msg );
+        }
+        else
+        {
+          QgsMessageLog::logMessage( msg, QStringLiteral( "Qt" ) );
+        }
       }
 #endif
 
@@ -848,7 +864,7 @@ int main( int argc, char *argv[] )
                 "You are seeing this message most likely because you "
                 "have no DISPLAY environment variable set.\n"
               ).toUtf8().constData();
-    exit( 1 ); //exit for now until a version of qgis is capabable of running non interactive
+    exit( 1 ); //exit for now until a version of qgis is capable of running non interactive
   }
 
   // GUI customization is enabled according to settings (loaded when instance is created)

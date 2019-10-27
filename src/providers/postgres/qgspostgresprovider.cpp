@@ -105,6 +105,11 @@ QgsPostgresProvider::QgsPostgresProvider( QString const &uri, const ProviderOpti
   mSchemaName = mUri.schema();
   mTableName = mUri.table();
   mGeometryColumn = mUri.geometryColumn();
+  mBoundingBoxColumn = mUri.param( "bbox" );
+  if ( mBoundingBoxColumn.isEmpty() )
+  {
+    mBoundingBoxColumn = mGeometryColumn;
+  }
   mSqlWhereClause = mUri.sql();
   mRequestedSrid = mUri.srid();
   mRequestedGeomType = mUri.wkbType();
@@ -174,7 +179,7 @@ QgsPostgresProvider::QgsPostgresProvider( QString const &uri, const ProviderOpti
   if ( !getGeometryDetails() ) // gets srid, geometry and data type
   {
     // the table is not a geometry table
-    QgsMessageLog::logMessage( tr( "invalid PostgreSQL layer" ), tr( "PostGIS" ) );
+    QgsMessageLog::logMessage( tr( "Invalid PostgreSQL layer" ), tr( "PostGIS" ) );
     disconnectDb();
     return;
   }
@@ -186,7 +191,7 @@ QgsPostgresProvider::QgsPostgresProvider( QString const &uri, const ProviderOpti
   {
     if ( !getTopoLayerInfo() ) // gets topology name and layer id
     {
-      QgsMessageLog::logMessage( tr( "invalid PostgreSQL topology layer" ), tr( "PostGIS" ) );
+      QgsMessageLog::logMessage( tr( "Invalid PostgreSQL topology layer" ), tr( "PostGIS" ) );
       mValid = false;
       disconnectDb();
       return;
@@ -353,7 +358,12 @@ QgsPostgresConn *QgsPostgresProvider::connectionRW()
 
 QgsTransaction *QgsPostgresProvider::transaction() const
 {
-  return static_cast<QgsTransaction *>( mTransaction );
+  return mTransaction;
+}
+
+QString QgsPostgresProvider::providerKey()
+{
+  return POSTGRES_KEY;
 }
 
 void QgsPostgresProvider::setTransaction( QgsTransaction *transaction )
@@ -934,7 +944,7 @@ bool QgsPostgresProvider::loadFields()
           }
           else if ( formattedFieldType != QLatin1String( "numeric" ) )
           {
-            QgsMessageLog::logMessage( tr( "unexpected formatted field type '%1' for field %2" )
+            QgsMessageLog::logMessage( tr( "Unexpected formatted field type '%1' for field %2" )
                                        .arg( formattedFieldType,
                                              fieldName ),
                                        tr( "PostGIS" ) );
@@ -1005,7 +1015,7 @@ bool QgsPostgresProvider::loadFields()
         }
         else
         {
-          QgsDebugMsg( QStringLiteral( "unexpected formatted field type '%1' for field %2" )
+          QgsDebugMsg( QStringLiteral( "Unexpected formatted field type '%1' for field %2" )
                        .arg( formattedFieldType,
                              fieldName ) );
           fieldSize = -1;
@@ -1023,7 +1033,7 @@ bool QgsPostgresProvider::loadFields()
         }
         else
         {
-          QgsMessageLog::logMessage( tr( "unexpected formatted field type '%1' for field %2" )
+          QgsMessageLog::logMessage( tr( "Unexpected formatted field type '%1' for field %2" )
                                      .arg( formattedFieldType,
                                            fieldName ) );
           fieldSize = -1;
@@ -1044,8 +1054,19 @@ bool QgsPostgresProvider::loadFields()
       }
       else
       {
-        QgsMessageLog::logMessage( tr( "Field %1 ignored, because of unsupported type %2" ).arg( fieldName, fieldTypeName ), tr( "PostGIS" ) );
-        continue;
+        // be tolerant in case of views: this might be a field used as a key
+        const QgsPostgresProvider::Relkind type = relkind();
+        if ( ( type == Relkind::View || type == Relkind::MaterializedView ) && parseUriKey( mUri.keyColumn( ) ).contains( fieldName ) )
+        {
+          // Assume it is convertible to text
+          fieldType = QVariant::String;
+          fieldSize = -1;
+        }
+        else
+        {
+          QgsMessageLog::logMessage( tr( "Field %1 ignored, because of unsupported type %2" ).arg( fieldName, fieldTType ), tr( "PostGIS" ) );
+          continue;
+        }
       }
 
       if ( isArray )
@@ -1363,7 +1384,7 @@ bool QgsPostgresProvider::determinePrimaryKey()
       // If the relation is a view try to find a suitable column to use as
       // the primary key.
 
-      QgsPostgresProvider::Relkind type = relkind();
+      const QgsPostgresProvider::Relkind type = relkind();
 
       if ( type == Relkind::OrdinaryTable || type == Relkind::PartitionedTable )
       {
@@ -1844,7 +1865,7 @@ bool QgsPostgresProvider::parseDomainCheckConstraint( QStringList &enumValues, c
 
       //we assume that the constraint is of the following form:
       //(VALUE = ANY (ARRAY['a'::text, 'b'::text, 'c'::text, 'd'::text]))
-      //normally, PostgreSQL creates that if the contstraint has been specified as 'VALUE in ('a', 'b', 'c', 'd')
+      //normally, PostgreSQL creates that if the constraint has been specified as 'VALUE in ('a', 'b', 'c', 'd')
 
       int anyPos = checkDefinition.indexOf( QRegExp( "VALUE\\s*=\\s*ANY\\s*\\(\\s*ARRAY\\s*\\[" ) );
       int arrayPosition = checkDefinition.lastIndexOf( QLatin1String( "ARRAY[" ) );
@@ -3513,7 +3534,7 @@ bool QgsPostgresProvider::getGeometryDetails()
     }
   }
 
-  QString detectedType;
+  QString detectedType = mRequestedGeomType == QgsWkbTypes::Unknown ? QString() : QgsPostgresConn::postgisWkbTypeName( mRequestedGeomType );
   QString detectedSrid = mRequestedSrid;
   if ( !schemaName.isEmpty() )
   {
@@ -3529,14 +3550,17 @@ bool QgsPostgresProvider::getGeometryDetails()
 
     if ( result.PQntuples() == 1 )
     {
-      detectedType = result.PQgetvalue( 0, 0 );
+      QString dt = result.PQgetvalue( 0, 0 );
+      if ( dt != "GEOMETRY" ) detectedType = dt;
+
       QString dim = result.PQgetvalue( 0, 2 );
       if ( dim == QLatin1String( "3" ) && !detectedType.endsWith( 'M' ) )
         detectedType += QLatin1String( "Z" );
       else if ( dim == QLatin1String( "4" ) )
         detectedType += QLatin1String( "ZM" );
 
-      detectedSrid = result.PQgetvalue( 0, 1 );
+      QString ds = result.PQgetvalue( 0, 1 );
+      if ( ds != "0" ) detectedSrid = ds;
       mSpatialColType = SctGeometry;
     }
     else
@@ -3558,8 +3582,10 @@ bool QgsPostgresProvider::getGeometryDetails()
 
       if ( result.PQntuples() == 1 )
       {
-        detectedType = result.PQgetvalue( 0, 0 );
-        detectedSrid = result.PQgetvalue( 0, 1 );
+        QString dt = result.PQgetvalue( 0, 0 );
+        if ( dt != "GEOMETRY" ) detectedType = dt;
+        QString ds = result.PQgetvalue( 0, 1 );
+        if ( ds != "0" ) detectedSrid = ds;
         mSpatialColType = SctGeography;
       }
       else
@@ -4518,6 +4544,11 @@ QList<QgsVectorLayer *> QgsPostgresProvider::searchLayers( const QList<QgsVector
 QList<QgsRelation> QgsPostgresProvider::discoverRelations( const QgsVectorLayer *self, const QList<QgsVectorLayer *> &layers ) const
 {
   QList<QgsRelation> result;
+  if ( !mValid )
+  {
+    QgsLogger::warning( "Error getting the foreign keys of " + mTableName + ": invalid connection" );
+    return result;
+  }
   QString sql(
     "SELECT RC.CONSTRAINT_NAME, KCU1.COLUMN_NAME, KCU2.CONSTRAINT_SCHEMA, KCU2.TABLE_NAME, KCU2.COLUMN_NAME, KCU1.ORDINAL_POSITION "
     "FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS AS RC "
@@ -4707,7 +4738,7 @@ bool QgsPostgresProviderMetadata::saveStyle( const QString &uri, const QString &
                                          ",styleSLD xml"
                                          ",useAsDefault boolean"
                                          ",description text"
-                                         ",owner varchar(63)"
+                                         ",owner varchar(63) DEFAULT CURRENT_USER"
                                          ",ui xml"
                                          ",update_time timestamp DEFAULT CURRENT_TIMESTAMP"
                                          ")" ) );
@@ -4749,7 +4780,7 @@ bool QgsPostgresProviderMetadata::saveStyle( const QString &uri, const QString &
                 .arg( QgsPostgresConn::quotedValue( styleName.isEmpty() ? dsUri.table() : styleName ) )
                 .arg( useAsDefault ? "true" : "false" )
                 .arg( QgsPostgresConn::quotedValue( styleDescription.isEmpty() ? QDateTime::currentDateTime().toString() : styleDescription ) )
-                .arg( QgsPostgresConn::quotedValue( dsUri.username() ) )
+                .arg( "CURRENT_USER" )
                 .arg( uiFileColumn )
                 .arg( uiFileValue )
                 // Must be the final .arg replacement - see above
@@ -4795,7 +4826,7 @@ bool QgsPostgresProviderMetadata::saveStyle( const QString &uri, const QString &
                    " AND styleName=%10" )
           .arg( useAsDefault ? "true" : "false" )
           .arg( QgsPostgresConn::quotedValue( styleDescription.isEmpty() ? QDateTime::currentDateTime().toString() : styleDescription ) )
-          .arg( QgsPostgresConn::quotedValue( dsUri.username() ) )
+          .arg( "CURRENT_USER" )
           .arg( QgsPostgresConn::quotedValue( dsUri.database() ) )
           .arg( QgsPostgresConn::quotedValue( dsUri.schema() ) )
           .arg( QgsPostgresConn::quotedValue( dsUri.table() ) )
@@ -5038,9 +5069,9 @@ QMap<QString, QgsAbstractProviderConnection *> QgsPostgresProviderMetadata::conn
   return connectionsProtected<QgsPostgresProviderConnection, QgsPostgresConn>( cached );
 }
 
-QgsAbstractProviderConnection *QgsPostgresProviderMetadata::createConnection( const QString &name, const QString &uri )
+QgsAbstractProviderConnection *QgsPostgresProviderMetadata::createConnection( const QString &uri, const QVariantMap &configuration )
 {
-  return new QgsPostgresProviderConnection( name, uri );
+  return new QgsPostgresProviderConnection( uri, configuration );
 }
 
 void QgsPostgresProviderMetadata::deleteConnection( const QString &name )
@@ -5048,9 +5079,9 @@ void QgsPostgresProviderMetadata::deleteConnection( const QString &name )
   deleteConnectionProtected<QgsPostgresProviderConnection>( name );
 }
 
-void QgsPostgresProviderMetadata::saveConnection( QgsAbstractProviderConnection *conn, const QVariantMap &configuration )
+void QgsPostgresProviderMetadata::saveConnection( const QgsAbstractProviderConnection *conn,  const QString &name )
 {
-  saveConnectionProtected( conn, configuration );
+  saveConnectionProtected( conn, name );
 }
 
 QgsAbstractProviderConnection *QgsPostgresProviderMetadata::createConnection( const QString &name )
@@ -5200,7 +5231,9 @@ QgsPostgresProviderMetadata::QgsPostgresProviderMetadata()
 {
 }
 
+#ifndef HAVE_STATIC_PROVIDERS
 QGISEXTERN QgsProviderMetadata *providerMetadataFactory()
 {
   return new QgsPostgresProviderMetadata();
 }
+#endif

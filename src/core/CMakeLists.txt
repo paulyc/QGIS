@@ -20,6 +20,16 @@ SET(QGIS_CORE_SRCS
   callouts/qgscallout.cpp
   callouts/qgscalloutsregistry.cpp
 
+  classification/qgsclassificationmethodregistry.cpp
+  classification/qgsclassificationmethod.cpp
+  classification/qgsclassificationcustom.cpp
+  classification/qgsclassificationequalinterval.cpp
+  classification/qgsclassificationprettybreaks.cpp
+  classification/qgsclassificationquantile.cpp
+  classification/qgsclassificationjenks.cpp
+  classification/qgsclassificationstandarddeviation.cpp
+  classification/qgsclassificationlogarithmic.cpp
+
   gps/qgsgpsconnection.cpp
   gps/qgsgpsconnectionregistry.cpp
   gps/qgsgpsdconnection.cpp
@@ -45,6 +55,7 @@ SET(QGIS_CORE_SRCS
   symbology/qgspointdisplacementrenderer.cpp
   symbology/qgspointdistancerenderer.cpp
   symbology/qgsrenderer.cpp
+  symbology/qgsrendererrange.cpp
   symbology/qgsrendererregistry.cpp
   symbology/qgsrulebasedrenderer.cpp
   symbology/qgssinglesymbolrenderer.cpp
@@ -180,6 +191,8 @@ SET(QGIS_CORE_SRCS
   qgsauxiliarystorage.cpp
   qgsbearingutils.cpp
   qgsblockingnetworkrequest.cpp
+  qgsbookmarkmanager.cpp
+  qgsbookmarkmodel.cpp
   qgsbrowsermodel.cpp
   qgsbrowserproxymodel.cpp
   qgscachedfeatureiterator.cpp
@@ -341,6 +354,7 @@ SET(QGIS_CORE_SRCS
   qgssqliteutils.cpp
   qgsspatialiteutils.cpp
   qgsstatisticalsummary.cpp
+  qgsstoredexpressionmanager.cpp
   qgsstringstatisticalsummary.cpp
   qgsstringutils.cpp
   qgstaskmanager.cpp
@@ -380,6 +394,7 @@ SET(QGIS_CORE_SRCS
   qgsvectorlayerundopassthroughcommand.cpp
   qgsvectorlayerutils.cpp
   qgsvectorsimplifymethod.cpp
+  qgsvectorlayerserverproperties.cpp
   qgsvirtuallayerdefinition.cpp
   qgsvirtuallayerdefinitionutils.cpp
   qgsmapthemecollection.cpp
@@ -553,6 +568,7 @@ SET(QGIS_CORE_SRCS
   3d/qgs3drendererregistry.cpp
   3d/qgsabstract3drenderer.cpp
 
+  fieldformatter/qgscheckboxfieldformatter.cpp
   fieldformatter/qgsrangefieldformatter.cpp
   fieldformatter/qgsdatetimefieldformatter.cpp
   fieldformatter/qgsfallbackfieldformatter.cpp
@@ -631,6 +647,7 @@ ELSE(NOT MSVC)
 ENDIF(NOT MSVC)
 
 SET(QGIS_CORE_MOC_HDRS
+  qgis.h
   qgsabstractcontentcache.h
   qgsabstractdatabaseproviderconnection.h
   qgsapplication.h
@@ -639,8 +656,11 @@ SET(QGIS_CORE_MOC_HDRS
   qgsanimatedicon.h
   qgsauxiliarystorage.h
   qgsblockingnetworkrequest.h
+  qgsbookmarkmanager.h
+  qgsbookmarkmodel.h
   qgsbrowsermodel.h
   qgsbrowserproxymodel.h
+  qgsconditionalstyle.h
   qgscoordinatereferencesystem.h
   qgscoordinateutils.h
   qgscredentials.h
@@ -699,6 +719,7 @@ SET(QGIS_CORE_MOC_HDRS
   qgsrunprocess.h
   qgssnappingconfig.h
   qgssnappingutils.h
+  qgsstoredexpressionmanager.h
   qgstaskmanager.h
   qgstolerance.h
   qgstracer.h
@@ -719,6 +740,7 @@ SET(QGIS_CORE_MOC_HDRS
   qgsvectorlayerrenderer.h
   qgsvectorlayertools.h
   qgsvectorsimplifymethod.h
+  qgsvectorlayerserverproperties.h
   qgsmapthemecollection.h
   qgswebpage.h
   qgswebview.h
@@ -875,6 +897,7 @@ ENDIF(MSVC)
 # the OS X framework target
 
 SET(QGIS_CORE_HDRS
+  ${CMAKE_SOURCE_DIR}/external/nlohmann/json_fwd.hpp
   ${CMAKE_BINARY_DIR}/qgsconfig.h
   ../plugins/qgisplugin.h
 
@@ -886,7 +909,6 @@ SET(QGIS_CORE_HDRS
 
   qgstessellator.h
 
-  qgis.h
   qgis_sip.h
   qgsabstractgeopdfexporter.h
   qgsabstractproviderconnection.h
@@ -909,7 +931,6 @@ SET(QGIS_CORE_HDRS
   qgscolorscheme.h
   qgscolorschemeregistry.h
   qgsconnectionpool.h
-  qgsconditionalstyle.h
   qgscoordinateformatter.h
   qgscoordinatetransform.h
   qgscoordinatetransformcontext.h
@@ -1072,6 +1093,16 @@ SET(QGIS_CORE_HDRS
   callouts/qgscallout.h
   callouts/qgscalloutsregistry.h
 
+  classification/qgsclassificationmethodregistry.h
+  classification/qgsclassificationmethod.h
+  classification/qgsclassificationcustom.h
+  classification/qgsclassificationequalinterval.h
+  classification/qgsclassificationprettybreaks.h
+  classification/qgsclassificationquantile.h
+  classification/qgsclassificationjenks.h
+  classification/qgsclassificationstandarddeviation.h
+  classification/qgsclassificationlogarithmic.h
+
   diagram/qgsdiagram.h
   diagram/qgspiediagram.h
   diagram/qgstextdiagram.h
@@ -1207,6 +1238,7 @@ SET(QGIS_CORE_HDRS
   symbology/qgspointdisplacementrenderer.h
   symbology/qgspointdistancerenderer.h
   symbology/qgsrenderer.h
+  symbology/qgsrendererrange.h
   symbology/qgsrendererregistry.h
   symbology/qgsrulebasedrenderer.h
   symbology/qgssinglesymbolrenderer.h
@@ -1258,6 +1290,7 @@ SET(QGIS_CORE_HDRS
   3d/qgs3drendererregistry.h
   3d/qgsabstract3drenderer.h
 
+  fieldformatter/qgscheckboxfieldformatter.h
   fieldformatter/qgsrangefieldformatter.h
   fieldformatter/qgsdatetimefieldformatter.h
   fieldformatter/qgsfallbackfieldformatter.h
@@ -1290,6 +1323,7 @@ INCLUDE_DIRECTORIES(
   3d
   annotations
   auth
+  classification
   dxf
   effects
   ${CMAKE_SOURCE_DIR}/src/core/expression
@@ -1317,6 +1351,7 @@ INCLUDE_DIRECTORIES(
   mesh
   validity
   ${CMAKE_SOURCE_DIR}/external
+  ${CMAKE_SOURCE_DIR}/external/nlohmann
   ${CMAKE_SOURCE_DIR}/external/kdbush/include
   ${CMAKE_SOURCE_DIR}/external/nmea
   ${CMAKE_SOURCE_DIR}/external/poly2tri
@@ -1390,8 +1425,8 @@ ENDIF(HAVE_OPENCL)
 
 IF(NOT APPLE)
   INSTALL(FILES ${QGIS_CORE_HDRS} ${QGIS_CORE_MOC_HDRS} DESTINATION ${QGIS_INCLUDE_DIR})
-  INSTALL(FILES ${CMAKE_SOURCE_DIR}/external/nlohmann/json_fwd.hpp DESTINATION ${QGIS_INCLUDE_DIR}/nlohmann)
 ELSE(NOT APPLE)
+
   SET_TARGET_PROPERTIES(qgis_core PROPERTIES
     CLEAN_DIRECT_OUTPUT 1
     FRAMEWORK 1
@@ -1427,7 +1462,8 @@ ADD_DEPENDENCIES(qgis_core version)
 # because of htonl
 IF (WIN32)
   FIND_LIBRARY(SETUPAPI_LIBRARY NAMES setupapi PATHS $ENV{LIB})
-  TARGET_LINK_LIBRARIES(qgis_core wsock32 ${SETUPAPI_LIBRARY} dbghelp)
+  FIND_LIBRARY(VERSION_LIBRARY NAMES version PATHS $ENV{LIB})
+  TARGET_LINK_LIBRARIES(qgis_core wsock32 ${SETUPAPI_LIBRARY} dbghelp ${VERSION_LIBRARY})
 ENDIF (WIN32)
 
 IF (APPLE)
@@ -1464,6 +1500,18 @@ TARGET_LINK_LIBRARIES(qgis_core
   ${SPATIALITE_LIBRARY}
   ${LIBZIP_LIBRARY}
 )
+
+IF (FORCE_STATIC_PROVIDERS)
+  INCLUDE_DIRECTORIES(
+    ${CMAKE_SOURCE_DIR}/src/providers/wms
+    ${CMAKE_SOURCE_DIR}/src/providers/postgres
+  )
+
+  TARGET_LINK_LIBRARIES(qgis_core
+    wmsprovider_a
+    postgresprovider_a
+  )
+ENDIF (FORCE_STATIC_PROVIDERS)
 
 IF (MSVC)
   #needed for linking to gdal which needs odbc

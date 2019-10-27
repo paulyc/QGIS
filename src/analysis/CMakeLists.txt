@@ -34,6 +34,7 @@ SET(QGIS_ANALYSIS_SRCS
   processing/qgsalgorithmclip.cpp
   processing/qgsalgorithmconvexhull.cpp
   processing/qgsalgorithmdbscanclustering.cpp
+  processing/qgsalgorithmdensifygeometriesbycount.cpp
   processing/qgsalgorithmdensifygeometriesbyinterval.cpp
   processing/qgsalgorithmdifference.cpp
   processing/qgsalgorithmdissolve.cpp
@@ -57,6 +58,7 @@ SET(QGIS_ANALYSIS_SRCS
   processing/qgsalgorithmfiltervertices.cpp
   processing/qgsalgorithmfixgeometries.cpp
   processing/qgsalgorithmforcerhr.cpp
+  processing/qgsalgorithmgrid.cpp
   processing/qgsalgorithmimportphotos.cpp
   processing/qgsalgorithminterpolatepoint.cpp
   processing/qgsalgorithmintersection.cpp
@@ -104,6 +106,7 @@ SET(QGIS_ANALYSIS_SRCS
   processing/qgsalgorithmsimplify.cpp
   processing/qgsalgorithmsmooth.cpp
   processing/qgsalgorithmsnaptogrid.cpp
+  processing/qgsalgorithmsplitfeaturesbyattributecharacter.cpp
   processing/qgsalgorithmsplitlineantimeridian.cpp
   processing/qgsalgorithmsplitlinesbylength.cpp
   processing/qgsalgorithmsplitwithlines.cpp
@@ -120,6 +123,7 @@ SET(QGIS_ANALYSIS_SRCS
   processing/qgsalgorithmvectorize.cpp
   processing/qgsalgorithmwedgebuffers.cpp
   processing/qgsalgorithmzonalhistogram.cpp
+  processing/qgsbookmarkalgorithms.cpp
   processing/qgsprojectstylealgorithms.cpp
   processing/qgsstylealgorithms.cpp
 
@@ -144,7 +148,6 @@ SET(QGIS_ANALYSIS_SRCS
   raster/qgsrastercalcnode.cpp
   raster/qgsrastercalculator.cpp
   raster/qgsrastermatrix.cpp
-  vector/mersenne-twister.cpp
   vector/qgsgeometrysnapper.cpp
   vector/qgsgeometrysnappersinglesource.cpp
   vector/qgszonalstatistics.cpp
@@ -284,7 +287,6 @@ SET(QGIS_ANALYSIS_HDRS
   mesh/qgsmeshcalculator.h
   mesh/qgsmeshcalcutils.h
 
-  vector/mersenne-twister.h
   vector/qgsgeometrysnapper.h
   vector/qgsgeometrysnappersinglesource.h
   vector/qgszonalstatistics.h
@@ -363,6 +365,7 @@ INCLUDE_DIRECTORIES(
   ${CMAKE_SOURCE_DIR}/src/core/expression
   ${CMAKE_SOURCE_DIR}/src/analysis/vector/geometry_checker
   ${CMAKE_SOURCE_DIR}/external
+  ${CMAKE_SOURCE_DIR}/external/nlohmann
 
   ${CMAKE_BINARY_DIR}/src/core
   ${CMAKE_BINARY_DIR}/src/analysis

@@ -29,6 +29,7 @@
 #include "qgsgui.h"
 #include "qgsattributeformeditorwidget.h"
 #include "qgsattributeforminterface.h"
+#include "qgsmultiedittoolbutton.h"
 
 class TestQgsAttributeForm : public QObject
 {
@@ -120,19 +121,19 @@ void TestQgsAttributeForm::testFieldConstraint()
   ww = qobject_cast<QgsEditorWidgetWrapper *>( form2.mWidgets[0] );
 
   // set value to 1
-  ww->setValue( 1 );
+  ww->setValues( 1, QVariantList() );
   QCOMPARE( spy.count(), 1 );
   QCOMPARE( constraintsLabel( &form2, ww )->text(), validLabel );
 
   // set value to null
   spy.clear();
-  ww->setValue( QVariant() );
+  ww->setValues( QVariant(), QVariantList() );
   QCOMPARE( spy.count(), 1 );
   QCOMPARE( constraintsLabel( &form2, ww )->text(), invalidLabel );
 
   // set value to 1
   spy.clear();
-  ww->setValue( 1 );
+  ww->setValues( 1, QVariantList() );
   QCOMPARE( spy.count(), 1 );
   QCOMPARE( constraintsLabel( &form2, ww )->text(), validLabel );
 
@@ -145,15 +146,15 @@ void TestQgsAttributeForm::testFieldConstraint()
   ww = qobject_cast<QgsEditorWidgetWrapper *>( form3.mWidgets[0] );
 
   // set value to 1
-  ww->setValue( 1 );
+  ww->setValues( 1, QVariantList() );
   QCOMPARE( constraintsLabel( &form3, ww )->text(), validLabel );
 
   // set value to null
-  ww->setValue( QVariant() );
+  ww->setValues( QVariant(), QVariantList() );
   QCOMPARE( constraintsLabel( &form3, ww )->text(), warningLabel );
 
   // set value to 1
-  ww->setValue( 1 );
+  ww->setValues( 1, QVariantList() );
   QCOMPARE( constraintsLabel( &form3, ww )->text(), validLabel );
 }
 
@@ -213,7 +214,7 @@ void TestQgsAttributeForm::testFieldMultiConstraints()
   QSignalSpy spy2( &form2, SIGNAL( widgetValueChanged( QString, QVariant, bool ) ) );
 
   // change value
-  ww0->setValue( 2 ); // update col0
+  ww0->setValues( 2, QVariantList() ); // update col0
   QCOMPARE( spy2.count(), 1 );
 
   QCOMPARE( constraintsLabel( &form2, ww0 )->text(), inv ); // 2 < ( 1 + 2 )
@@ -223,7 +224,7 @@ void TestQgsAttributeForm::testFieldMultiConstraints()
 
   // change value
   spy2.clear();
-  ww0->setValue( 1 ); // update col0
+  ww0->setValues( 1, QVariantList() ); // update col0
   QCOMPARE( spy2.count(), 1 );
 
   QCOMPARE( constraintsLabel( &form2, ww0 )->text(), val ); // 1 < ( 1 + 2 )
@@ -277,7 +278,7 @@ void TestQgsAttributeForm::testOKButtonStatus()
   form2.setFeature( ft );
   ww = qobject_cast<QgsEditorWidgetWrapper *>( form2.mWidgets[0] );
   okButton = form2.mButtonBox->button( QDialogButtonBox::Ok );
-  ww->setValue( 1 );
+  ww->setValues( 1, QVariantList() );
   QCOMPARE( okButton->isEnabled(), false );
 
   // valid constraint and editable layer : OK button enabled
@@ -287,7 +288,7 @@ void TestQgsAttributeForm::testOKButtonStatus()
   ww = qobject_cast<QgsEditorWidgetWrapper *>( form3.mWidgets[0] );
   okButton = form3.mButtonBox->button( QDialogButtonBox::Ok );
 
-  ww->setValue( 2 );
+  ww->setValues( 2, QVariantList() );
   QCOMPARE( okButton->isEnabled(), true );
 
   // valid constraint and not editable layer : OK button disabled
@@ -302,7 +303,7 @@ void TestQgsAttributeForm::testOKButtonStatus()
   form4.setFeature( ft );
   ww = qobject_cast<QgsEditorWidgetWrapper *>( form4.mWidgets[0] );
   okButton = form4.mButtonBox->button( QDialogButtonBox::Ok );
-  ww->setValue( 1 );
+  ww->setValues( 1, QVariantList() );
   QVERIFY( !okButton->isEnabled() );
   layer->startEditing();
   // just a soft constraint, so OK should be enabled
@@ -620,6 +621,25 @@ void TestQgsAttributeForm::testEditableJoin()
   ft0C = layerC->getFeature( 1 );
   QCOMPARE( ft0C.attribute( "col0" ), QVariant( 13 ) );
 
+  // all editor widget must have a multi edit button
+  layerA->startEditing();
+  layerB->startEditing();
+  layerC->startEditing();
+  layerA->select( ftA.id() );
+  form.setMode( QgsAttributeEditorContext::MultiEditMode );
+
+  // multi edit button must be displayed for A
+  QgsAttributeFormEditorWidget *formWidget = qobject_cast<QgsAttributeFormEditorWidget *>( form.mFormWidgets[1] );
+  QVERIFY( formWidget->mMultiEditButton->parent() );
+
+  // multi edit button must be displayed for B (join is editable)
+  formWidget = qobject_cast<QgsAttributeFormEditorWidget *>( form.mFormWidgets[1] );
+  QVERIFY( formWidget->mMultiEditButton->parent() );
+
+  // multi edit button must not be displayed for C (join is not editable)
+  formWidget = qobject_cast<QgsAttributeFormEditorWidget *>( form.mFormWidgets[2] );
+  QVERIFY( !formWidget->mMultiEditButton->parent() );
+
   // clean
   delete layerA;
   delete layerB;
@@ -925,6 +945,8 @@ void TestQgsAttributeForm::testDefaultValueUpdate()
   layer->setDefaultValueDefinition( 2, QgsDefaultValue( QStringLiteral( "\"col0\"+\"col1\"" ) ) );
   layer->setDefaultValueDefinition( 3, QgsDefaultValue( QStringLiteral( "\"col2\"" ) ) );
 
+  layer->startEditing();
+
   // build a form for this feature
   QgsFeature ft( layer->dataProvider()->fields(), 1 );
   ft.setAttribute( QStringLiteral( "col0" ), 0 );
@@ -985,6 +1007,8 @@ void TestQgsAttributeForm::testDefaultValueUpdateRecursion()
   layer->setDefaultValueDefinition( 1, QgsDefaultValue( QStringLiteral( "\"col0\"+1" ) ) );
   layer->setDefaultValueDefinition( 2, QgsDefaultValue( QStringLiteral( "\"col1\"+1" ) ) );
   layer->setDefaultValueDefinition( 3, QgsDefaultValue( QStringLiteral( "\"col2\"+1" ) ) );
+
+  layer->startEditing();
 
   // build a form for this feature
   QgsFeature ft( layer->dataProvider()->fields(), 1 );

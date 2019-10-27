@@ -54,7 +54,12 @@ QgsDecorationImageDialog::QgsDecorationImageDialog( QgsDecorationImage &deco, QW
   cboPlacement->addItem( tr( "Bottom Left" ), QgsDecorationItem::BottomLeft );
   cboPlacement->addItem( tr( "Bottom Center" ), QgsDecorationItem::BottomCenter );
   cboPlacement->addItem( tr( "Bottom Right" ), QgsDecorationItem::BottomRight );
+  connect( cboPlacement, qgis::overload<int>::of( &QComboBox::currentIndexChanged ), this, [ = ]( int )
+  {
+    spinHorizontal->setMinimum( cboPlacement->currentData() == QgsDecorationItem::TopCenter || cboPlacement->currentData() == QgsDecorationItem::BottomCenter ? -100 : 0 );
+  } );
   cboPlacement->setCurrentIndex( cboPlacement->findData( mDeco.placement() ) );
+
   spinHorizontal->setValue( mDeco.mMarginHorizontal );
   spinVertical->setValue( mDeco.mMarginVertical );
   wgtUnitSelection->setUnits( QgsUnitTypes::RenderUnitList() << QgsUnitTypes::RenderMillimeters << QgsUnitTypes::RenderPercentage << QgsUnitTypes::RenderPixels );
@@ -62,6 +67,7 @@ QgsDecorationImageDialog::QgsDecorationImageDialog( QgsDecorationImage &deco, QW
 
   // enabled
   grpEnable->setChecked( mDeco.enabled() );
+  connect( grpEnable, &QGroupBox::toggled, this, [ = ] { updateEnabledColorButtons(); } );
 
   wgtImagePath->setFilePath( mDeco.imagePath() );
   connect( wgtImagePath, &QgsFileWidget::fileChanged, this, &QgsDecorationImageDialog::updateImagePath );
@@ -110,10 +116,8 @@ void QgsDecorationImageDialog::apply()
   mDeco.update();
 }
 
-void QgsDecorationImageDialog::updateImagePath( const QString &imagePath )
+void QgsDecorationImageDialog::updateEnabledColorButtons()
 {
-  if ( mDeco.imagePath() != imagePath )
-    mDeco.setImagePath( imagePath );
 
   if ( mDeco.mImageFormat == QgsDecorationImage::FormatSVG )
   {
@@ -121,13 +125,13 @@ void QgsDecorationImageDialog::updateImagePath( const QString &imagePath )
     double defaultStrokeWidth, defaultFillOpacity, defaultStrokeOpacity;
     bool hasDefaultFillColor, hasDefaultFillOpacity, hasDefaultStrokeColor, hasDefaultStrokeWidth, hasDefaultStrokeOpacity;
     bool hasFillParam, hasFillOpacityParam, hasStrokeParam, hasStrokeWidthParam, hasStrokeOpacityParam;
-    QgsApplication::svgCache()->containsParams( imagePath, hasFillParam, hasDefaultFillColor, defaultFill,
+    QgsApplication::svgCache()->containsParams( mDeco.imagePath(), hasFillParam, hasDefaultFillColor, defaultFill,
         hasFillOpacityParam, hasDefaultFillOpacity, defaultFillOpacity,
         hasStrokeParam, hasDefaultStrokeColor, defaultStroke,
         hasStrokeWidthParam, hasDefaultStrokeWidth, defaultStrokeWidth,
         hasStrokeOpacityParam, hasDefaultStrokeOpacity, defaultStrokeOpacity );
 
-    pbnChangeColor->setEnabled( hasFillParam );
+    pbnChangeColor->setEnabled( grpEnable->isChecked() && hasFillParam );
     pbnChangeColor->setAllowOpacity( hasFillOpacityParam );
     if ( hasFillParam )
     {
@@ -135,7 +139,7 @@ void QgsDecorationImageDialog::updateImagePath( const QString &imagePath )
       fill.setAlphaF( hasFillOpacityParam && hasDefaultFillOpacity ? defaultFillOpacity : 1.0 );
       pbnChangeColor->setColor( fill );
     }
-    pbnChangeOutlineColor->setEnabled( hasStrokeParam );
+    pbnChangeOutlineColor->setEnabled( grpEnable->isChecked() && hasStrokeParam );
     pbnChangeOutlineColor->setAllowOpacity( hasStrokeOpacityParam );
     if ( hasStrokeParam )
     {
@@ -149,7 +153,14 @@ void QgsDecorationImageDialog::updateImagePath( const QString &imagePath )
     pbnChangeColor->setEnabled( false );
     pbnChangeOutlineColor->setEnabled( false );
   }
+}
 
+void QgsDecorationImageDialog::updateImagePath( const QString &imagePath )
+{
+  if ( mDeco.imagePath() != imagePath )
+    mDeco.setImagePath( imagePath );
+
+  updateEnabledColorButtons();
   drawImage();
 }
 
@@ -221,7 +232,7 @@ void QgsDecorationImageDialog::drawImage()
   if ( !missing )
   {
     QPixmap  px( maxLength, maxLength );
-    px.fill();
+    px.fill( Qt::transparent );
 
     QPainter painter;
     painter.begin( &px );
@@ -245,7 +256,7 @@ void QgsDecorationImageDialog::drawImage()
   else
   {
     QPixmap  px( 200, 200 );
-    px.fill();
+    px.fill( Qt::transparent );
     QPainter painter;
     painter.begin( &px );
     QFont font( QStringLiteral( "time" ), 12, QFont::Bold );

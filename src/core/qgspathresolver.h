@@ -20,6 +20,7 @@
 
 #include <QString>
 #include <functional>
+#include <vector>
 
 /**
  * \ingroup core
@@ -54,11 +55,16 @@ class CORE_EXPORT QgsPathResolver
      *
      * The path pre-processor function is called before any bad layer handler.
      *
-     * \note Setting a new \a processor replaces any existing processor.
+     * If multiple preprocessors are set, they will be called in sequence based on the order in which
+     * they were originally set.
      *
+     * \returns An auto-generated string uniquely identifying the preprocessor, which can later be
+     * used to remove the processor (via a call to removePathPreprocessor()).
+     *
+     * \see removePathPreprocessor()
      * \since QGIS 3.10
      */
-    static void setPathPreprocessor( const std::function< QString( const QString &filename )> &processor );
+    static QString setPathPreprocessor( const std::function< QString( const QString &filename )> &processor );
 #else
 
     /**
@@ -73,6 +79,7 @@ class CORE_EXPORT QgsPathResolver
      * \note Setting a new \a processor replaces any existing processor.
      *
      * Example - replace an outdated folder path with a new one:
+     *
      * \code{.py}
      *   def my_processor(path):
      *      return path.replace('c:/Users/ClintBarton/Documents/Projects', 'x:/Projects/')
@@ -81,6 +88,7 @@ class CORE_EXPORT QgsPathResolver
      * \endcode
      *
      * Example - replace a stored database host with a new one:
+     *
      * \code{.py}
      *   def my_processor(path):
      *      return path.replace('host=10.1.1.115', 'host=10.1.1.116')
@@ -89,6 +97,7 @@ class CORE_EXPORT QgsPathResolver
      * \endcode
      *
      * Example - replace stored database credentials with new ones:
+     *
      * \code{.py}
      *   def my_processor(path):
      *      path = path.replace("user='gis_team'", "user='team_awesome'")
@@ -100,11 +109,12 @@ class CORE_EXPORT QgsPathResolver
      *
      * \since QGIS 3.10
      */
-    static void setPathPreprocessor( SIP_PYCALLABLE / AllowNone / );
+    static QString setPathPreprocessor( SIP_PYCALLABLE / AllowNone / );
     % MethodCode
+    PyObject *s = 0;
     Py_BEGIN_ALLOW_THREADS
     Py_XINCREF( a0 );
-    QgsPathResolver::setPathPreprocessor( [a0]( const QString &arg )->QString
+    QString id = QgsPathResolver::setPathPreprocessor( [a0]( const QString &arg )->QString
     {
       QString res;
       SIP_BLOCK_THREADS
@@ -121,7 +131,43 @@ class CORE_EXPORT QgsPathResolver
       return res;
     } );
 
+    s = sipConvertFromNewType( new QString( id ), sipType_QString, 0 );
     Py_END_ALLOW_THREADS
+    return s;
+    % End
+#endif
+
+#ifndef SIP_RUN
+
+    /**
+     * Removes the custom pre-processor function with matching \a id.
+     *
+     * The \a id must correspond to a pre-processor previously added via a call to setPathPreprocessor().
+     *
+     * Returns TRUE if processor existed and was removed.
+     *
+     * \see setPathPreprocessor()
+     * \since QGIS 3.10
+     */
+    static bool removePathPreprocessor( const QString &id );
+#else
+
+    /**
+     * Removes the custom pre-processor function with matching \a id.
+     *
+     * The \a id must correspond to a pre-processor previously added via a call to setPathPreprocessor().
+     * An KeyError will be raised if no processor with the specified \a id exists.
+     *
+     * \see setPathPreprocessor()
+     * \since QGIS 3.10
+     */
+    static void removePathPreprocessor( const QString &id );
+    % MethodCode
+    if ( !QgsPathResolver::removePathPreprocessor( *a0 ) )
+    {
+      PyErr_SetString( PyExc_KeyError, QStringLiteral( "No processor with id %1 exists." ).arg( *a0 ).toUtf8().constData() );
+      sipIsErr = 1;
+    }
     % End
 #endif
 
@@ -129,7 +175,7 @@ class CORE_EXPORT QgsPathResolver
     //! path to a file that is the base for relative path resolution
     QString mBaseFileName;
 
-    static std::function< QString( const QString & ) > sCustomResolver;
+    static std::vector< std::pair< QString, std::function< QString( const QString & ) > > > sCustomResolvers;
 };
 
 #endif // QGSPATHRESOLVER_H

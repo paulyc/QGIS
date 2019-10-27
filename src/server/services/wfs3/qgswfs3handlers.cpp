@@ -28,6 +28,13 @@
 #include "qgsbufferserverrequest.h"
 #include "qgsserverprojectutils.h"
 #include "qgsserverinterface.h"
+#include "qgsexpressioncontext.h"
+#include "qgsexpressioncontextutils.h"
+
+#ifdef HAVE_SERVER_PYTHON_PLUGINS
+#include "qgsfilterrestorer.h"
+#include "qgsaccesscontrol.h"
+#endif
 
 #include <QMimeDatabase>
 
@@ -53,7 +60,6 @@ void QgsWfs3APIHandler::handleRequest( const QgsServerApiContext &context ) cons
   const QgsProjectMetadata metadata { context.project()->metadata() };
   json data
   {
-    { "links", links( context ) },
     { "openapi", "3.0.1" },
     {
       "tags", {{
@@ -92,7 +98,11 @@ void QgsWfs3APIHandler::handleRequest( const QgsServerApiContext &context ) cons
     }
   };
 
-  assert( data.is_object() );
+  // Add links only if not OPENAPI3 to avoid validation errors
+  if ( QgsServerOgcApiHandler::contentTypeFromRequest( context.request() ) != QgsServerOgcApi::ContentType::OPENAPI3 )
+  {
+    data["links"] = links( context );
+  }
 
   // Gather path information from handlers
   json paths = json::array();
@@ -140,7 +150,7 @@ void QgsWfs3APIHandler::handleRequest( const QgsServerApiContext &context ) cons
 json QgsWfs3APIHandler::schema( const QgsServerApiContext &context ) const
 {
   json data;
-  const std::string path { QgsServerApiUtils::appendMapParameter( context.apiRootPath() + QStringLiteral( "api" ), context.request()->url() ).toStdString() };
+  const std::string path { QgsServerApiUtils::appendMapParameter( context.apiRootPath() + QStringLiteral( "/api" ), context.request()->url() ).toStdString() };
   data[ path ] =
   {
     {
@@ -178,13 +188,87 @@ json QgsWfs3APIHandler::schema( const QgsServerApiContext &context ) const
                 }
               }
             },
-            defaultResponse()
+            { "default", defaultResponse() }
           }
         }
       }
     }
   };
   return data;
+}
+
+void QgsWfs3AbstractItemsHandler::checkLayerIsAccessible( const QgsVectorLayer *mapLayer, const QgsServerApiContext &context ) const
+{
+  const QVector<const QgsVectorLayer *> publishedLayers = QgsServerApiUtils::publishedWfsLayers<QgsVectorLayer>( context );
+  if ( ! publishedLayers.contains( mapLayer ) )
+  {
+    throw QgsServerApiNotFoundError( QStringLiteral( "Collection was not found" ) );
+  }
+}
+
+QgsFeatureRequest QgsWfs3AbstractItemsHandler::filteredRequest( const QgsVectorLayer *vLayer, const QgsServerApiContext &context ) const
+{
+  QgsFeatureRequest featureRequest;
+  QgsExpressionContext expressionContext;
+  expressionContext << QgsExpressionContextUtils::globalScope()
+                    << QgsExpressionContextUtils::projectScope( context.project() )
+                    << QgsExpressionContextUtils::layerScope( vLayer );
+
+  featureRequest.setExpressionContext( expressionContext );
+
+#ifdef HAVE_SERVER_PYTHON_PLUGINS
+  // Python plugins can make further modifications to the allowed attributes
+  QgsAccessControl *accessControl = context.serverInterface()->accessControls();
+  if ( accessControl )
+  {
+    accessControl->filterFeatures( vLayer, featureRequest );
+  }
+#endif
+
+  QSet<QString> publishedAttrs;
+  const QgsFields constFields { publishedFields( vLayer, context ) };
+  for ( const QgsField &f : constFields )
+  {
+    publishedAttrs.insert( f.name() );
+  }
+  featureRequest.setSubsetOfAttributes( publishedAttrs, vLayer->fields() );
+  return featureRequest;
+}
+
+QgsFields QgsWfs3AbstractItemsHandler::publishedFields( const QgsVectorLayer *vLayer, const QgsServerApiContext &context ) const
+{
+
+  QStringList publishedAttributes = QStringList();
+  // Removed attributes
+  // WFS excluded attributes for this layer
+  const QSet<QString> &layerExcludedAttributes = vLayer->excludeAttributesWfs();
+  const QgsFields &fields = vLayer->fields();
+  for ( int i = 0; i < fields.count(); ++i )
+  {
+    if ( ! layerExcludedAttributes.contains( fields.at( i ).name() ) )
+    {
+      publishedAttributes.push_back( fields.at( i ).name() );
+    }
+  }
+
+#ifdef HAVE_SERVER_PYTHON_PLUGINS
+  // Python plugins can make further modifications to the allowed attributes
+  QgsAccessControl *accessControl = context.serverInterface()->accessControls();
+  if ( accessControl )
+  {
+    publishedAttributes = accessControl->layerAttributes( vLayer, publishedAttributes );
+  }
+#endif
+
+  QgsFields publishedFields;
+  for ( int i = 0; i < fields.count(); ++i )
+  {
+    if ( publishedAttributes.contains( fields.at( i ).name() ) )
+    {
+      publishedFields.append( fields.at( i ) );
+    }
+  }
+  return publishedFields;
 }
 
 QgsWfs3LandingPageHandler::QgsWfs3LandingPageHandler()
@@ -245,7 +329,7 @@ json QgsWfs3LandingPageHandler::schema( const QgsServerApiContext &context ) con
                     {
                       "application/json", {
                         {
-                          "schema",  {
+                          "schema", {
                             { "$ref", "#/components/schemas/root" }
                           }
                         }
@@ -264,7 +348,7 @@ json QgsWfs3LandingPageHandler::schema( const QgsServerApiContext &context ) con
                 }
               }
             },
-            defaultResponse()
+            { "default", defaultResponse() }
           }
         }
       }
@@ -339,7 +423,7 @@ json QgsWfs3ConformanceHandler::schema( const QgsServerApiContext &context ) con
                 }
               }
             },
-            defaultResponse()
+            { "default", defaultResponse() }
           }
         }
       }
@@ -369,18 +453,32 @@ void QgsWfs3CollectionsHandler::handleRequest( const QgsServerApiContext &contex
       "crs", crss
     }
   };
-
   if ( context.project() )
   {
-    // TODO: include meshes?
-    for ( const auto &layer : context.project()->layers<QgsVectorLayer *>( ) )
+
+    const QgsProject *project = context.project();
+    const QStringList wfsLayerIds = QgsServerProjectUtils::wfsLayerIds( *project );
+    for ( const QString &wfsLayerId : wfsLayerIds )
     {
+      const QgsVectorLayer *layer = qobject_cast<QgsVectorLayer *>( project->mapLayer( wfsLayerId ) );
+      if ( !layer )
+      {
+        continue;
+      }
+      if ( layer->type() != QgsMapLayerType::VectorLayer )
+      {
+        continue;
+      }
+
+      // Check if the layer is published, raise not found if it is not
+      checkLayerIsAccessible( layer, context );
+
       const std::string title { layer->title().isEmpty() ? layer->name().toStdString() : layer->title().toStdString() };
       const QString shortName { layer->shortName().isEmpty() ? layer->name() : layer->shortName() };
       data["collections"].push_back(
       {
         // identifier of the collection used, for example, in URIs
-        { "name", shortName.toStdString() },
+        { "id", shortName.toStdString() },
         // human readable title of the collection
         { "title", title },
         // a description of the features in the collection
@@ -391,8 +489,12 @@ void QgsWfs3CollectionsHandler::handleRequest( const QgsServerApiContext &contex
         // TODO: "relations" ?
         {
           "extent",  {
-            { "crs", "http://www.opengis.net/def/crs/OGC/1.3/CRS84" },
-            { "spatial", QgsServerApiUtils::layerExtent( layer ) }
+            {
+              "spatial", {
+                { "bbox", QgsServerApiUtils::layerExtent( layer ) },
+                { "crs", "http://www.opengis.net/def/crs/OGC/1.3/CRS84" },
+              }
+            }
           }
         },
         {
@@ -468,7 +570,7 @@ json QgsWfs3CollectionsHandler::schema( const QgsServerApiContext &context ) con
                 }
               }
             },
-            defaultResponse()
+            { "default", defaultResponse() }
           }
         }
       }
@@ -495,8 +597,19 @@ void QgsWfs3DescribeCollectionHandler::handleRequest( const QgsServerApiContext 
   }
   const QString collectionId { match.captured( QStringLiteral( "collectionId" ) ) };
   // May throw if not found
-  const QgsVectorLayer *mapLayer { layerFromCollection( context, collectionId ) };
+  const QgsVectorLayer *mapLayer { layerFromCollectionId( context, collectionId ) };
   Q_ASSERT( mapLayer );
+
+
+  const QgsProject *project = context.project();
+  const QStringList wfsLayerIds = QgsServerProjectUtils::wfsLayerIds( *project );
+  if ( ! wfsLayerIds.contains( mapLayer->id() ) )
+  {
+    throw QgsServerApiNotFoundError( QStringLiteral( "Collection was not found" ) );
+  }
+
+  // Check if the layer is published, raise not found if it is not
+  checkLayerIsAccessible( mapLayer, context );
 
   const std::string title { mapLayer->title().isEmpty() ? mapLayer->name().toStdString() : mapLayer->title().toStdString() };
   const QString shortName { mapLayer->shortName().isEmpty() ? mapLayer->name() : mapLayer->shortName() };
@@ -532,7 +645,7 @@ void QgsWfs3DescribeCollectionHandler::handleRequest( const QgsServerApiContext 
   }
   json data
   {
-    { "name", mapLayer->name().toStdString() },
+    { "id", mapLayer->name().toStdString() },
     { "title", title },
     // TODO: check if we need to expose other advertised CRS here
     {
@@ -541,8 +654,12 @@ void QgsWfs3DescribeCollectionHandler::handleRequest( const QgsServerApiContext 
     // TODO: "relations" ?
     {
       "extent",  {
-        { "crs", "http://www.opengis.net/def/crs/OGC/1.3/CRS84" },
-        { "spatial", QgsServerApiUtils::layerExtent( mapLayer ) }
+        {
+          "spatial", {
+            { "bbox", QgsServerApiUtils::layerExtent( mapLayer ) },
+            { "crs", "http://www.opengis.net/def/crs/OGC/1.3/CRS84" },
+          }
+        }
       }
     },
     {
@@ -561,7 +678,7 @@ json QgsWfs3DescribeCollectionHandler::schema( const QgsServerApiContext &contex
   json data;
   Q_ASSERT( context.project() );
 
-  const auto layers { QgsServerApiUtils::publishedWfsLayers<QgsVectorLayer>( context.project() ) };
+  const auto layers { QgsServerApiUtils::publishedWfsLayers<QgsVectorLayer>( context ) };
   // Construct the context with collection id
   for ( const auto &mapLayer : layers )
   {
@@ -569,7 +686,7 @@ json QgsWfs3DescribeCollectionHandler::schema( const QgsServerApiContext &contex
     // Use layer id for operationId
     const QString layerId { mapLayer->id() };
     const std::string title { mapLayer->title().isEmpty() ? mapLayer->name().toStdString() : mapLayer->title().toStdString() };
-    const std::string path { QgsServerApiUtils::appendMapParameter( context.apiRootPath() + QStringLiteral( "collections/%1" ).arg( shortName ), context.request()->url() ).toStdString() };
+    const std::string path { QgsServerApiUtils::appendMapParameter( context.apiRootPath() + QStringLiteral( "/collections/%1" ).arg( shortName ), context.request()->url() ).toStdString() };
 
     data[ path ] =
     {
@@ -608,13 +725,13 @@ json QgsWfs3DescribeCollectionHandler::schema( const QgsServerApiContext &contex
                   }
                 }
               },
-              defaultResponse()
+              { "default", defaultResponse() }
             }
           }
         }
       }
     };
-  }
+  } // end for loop
   return data;
 }
 
@@ -662,7 +779,8 @@ QList<QgsServerQueryStringParameter> QgsWfs3CollectionsItemsHandler::parameters(
       } );
       offset.setDescription( QStringLiteral( "Offset for features to retrieve [0-%1]" ).arg( mapLayer->featureCount( ) ) );
       offsetValidatorSet = true;
-      for ( const auto &p : fieldParameters( mapLayer ) )
+      const QList<QgsServerQueryStringParameter> constFieldParameters { fieldParameters( mapLayer, context ) };
+      for ( const auto &p : constFieldParameters )
       {
         params.push_back( p );
       }
@@ -722,7 +840,7 @@ json QgsWfs3CollectionsItemsHandler::schema( const QgsServerApiContext &context 
   json data;
   Q_ASSERT( context.project() );
 
-  const auto layers { QgsServerApiUtils::publishedWfsLayers<QgsVectorLayer>( context.project() ) };
+  const QVector<const QgsVectorLayer *> layers { QgsServerApiUtils::publishedWfsLayers<QgsVectorLayer>( context ) };
   // Construct the context with collection id
   for ( const auto &mapLayer : layers )
   {
@@ -733,16 +851,17 @@ json QgsWfs3CollectionsItemsHandler::schema( const QgsServerApiContext &context 
     const std::string path { QgsServerApiUtils::appendMapParameter( context.apiRootPath() + QStringLiteral( "/collections/%1/items" ).arg( shortName ), context.request()->url() ).toStdString() };
 
     json parameters = {{
-        {{ "$ref", "#/components/parameters/limit" }},
-        {{ "$ref", "#/components/parameters/offset" }},
-        {{ "$ref", "#/components/parameters/resultType" }},
-        {{ "$ref", "#/components/parameters/bbox" }},
-        {{ "$ref", "#/components/parameters/bbox-crs" }},
+        { "$ref", "#/components/parameters/limit" },
+        { "$ref", "#/components/parameters/offset" },
+        { "$ref", "#/components/parameters/resultType" },
+        { "$ref", "#/components/parameters/bbox" },
+        { "$ref", "#/components/parameters/bbox-crs" },
         // TODO: {{ "$ref", "#/components/parameters/time" }},
       }
     };
 
-    for ( const auto &p : fieldParameters( mapLayer ) )
+    const QList<QgsServerQueryStringParameter> constFieldParameters { fieldParameters( mapLayer, context ) };
+    for ( const auto &p : constFieldParameters )
     {
       const std::string name { p.name().toStdString() };
       parameters.push_back( p.data() );
@@ -786,24 +905,25 @@ json QgsWfs3CollectionsItemsHandler::schema( const QgsServerApiContext &context 
                   }
                 }
               },
-              defaultResponse()
+              { "default", defaultResponse() }
             }
           }
         }
       }
     };
-  }
+  } // end for loop
   return data;
 }
 
-const QList<QgsServerQueryStringParameter> QgsWfs3CollectionsItemsHandler::fieldParameters( const QgsVectorLayer *mapLayer ) const
+const QList<QgsServerQueryStringParameter> QgsWfs3CollectionsItemsHandler::fieldParameters( const QgsVectorLayer *mapLayer, const QgsServerApiContext &context ) const
 {
   QList<QgsServerQueryStringParameter> params;
   if ( mapLayer )
   {
-    const QgsFields constFields { QgsServerApiUtils::publishedFields( mapLayer ) };
+    const QgsFields constFields { publishedFields( mapLayer, context ) };
     for ( const auto &f : constFields )
     {
+      const QString fName { f.alias().isEmpty() ? f.name() : f.alias() };
       QgsServerQueryStringParameter::Type t;
       switch ( f.type() )
       {
@@ -819,8 +939,8 @@ const QList<QgsServerQueryStringParameter> QgsWfs3CollectionsItemsHandler::field
           t = QgsServerQueryStringParameter::Type::String;
           break;
       }
-      QgsServerQueryStringParameter fieldParam { f.name(), false,
-          t, QStringLiteral( "Retrieve features filtered by: %1 (%2)" ).arg( f.name() )
+      QgsServerQueryStringParameter fieldParam { fName, false,
+          t, QStringLiteral( "Retrieve features filtered by: %1 (%2)" ).arg( fName )
           .arg( QgsServerQueryStringParameter::typeName( t ) ) };
       params.push_back( fieldParam );
     }
@@ -836,6 +956,10 @@ void QgsWfs3CollectionsItemsHandler::handleRequest( const QgsServerApiContext &c
   }
   QgsVectorLayer *mapLayer { layerFromContext( context ) };
   Q_ASSERT( mapLayer );
+
+  // Check if the layer is published, raise not found if it is not
+  checkLayerIsAccessible( mapLayer, context );
+
   const std::string title { mapLayer->title().isEmpty() ? mapLayer->name().toStdString() : mapLayer->title().toStdString() };
   const QString shortName { mapLayer->shortName().isEmpty() ? mapLayer->name() : mapLayer->shortName() };
 
@@ -880,10 +1004,11 @@ void QgsWfs3CollectionsItemsHandler::handleRequest( const QgsServerApiContext &c
 
     // Attribute filters
     QgsStringMap attrFilters;
-    const QgsFields constField { QgsServerApiUtils::publishedFields( mapLayer ) };
-    for ( const QgsField &f : constField )
+    const QgsFields constFields { publishedFields( mapLayer, context ) };
+    for ( const QgsField &f : constFields )
     {
-      const QString val = params.value( f.name() ).toString() ;
+      const QString fName { f.alias().isEmpty() ? f.name() : f.alias() };
+      const QString val = params.value( fName ).toString() ;
       if ( ! val.isEmpty() )
       {
         QString sanitized { QgsServerApiUtils::sanitizedFieldValue( val ) };
@@ -891,7 +1016,7 @@ void QgsWfs3CollectionsItemsHandler::handleRequest( const QgsServerApiContext &c
         {
           throw QgsServerApiBadRequestException( QStringLiteral( "Invalid filter field value [%1=%2]" ).arg( f.name() ).arg( val ) );
         }
-        attrFilters[f.name()] = sanitized;
+        attrFilters[fName] = sanitized;
       }
     }
 
@@ -911,18 +1036,22 @@ void QgsWfs3CollectionsItemsHandler::handleRequest( const QgsServerApiContext &c
     }
 
     // Inputs are valid, process request
-    QgsFeatureRequest req;
+    QgsFeatureRequest featureRequest = filteredRequest( mapLayer, context );
     if ( ! filterRect.isNull() )
     {
       QgsCoordinateTransform ct( bboxCrs, mapLayer->crs(), context.project()->transformContext() );
       ct.transform( filterRect );
-      req.setFilterRect( ct.transform( filterRect ) );
+      featureRequest.setFilterRect( ct.transform( filterRect ) );
     }
 
     QString filterExpression;
     if ( ! attrFilters.isEmpty() )
     {
       QStringList expressions;
+      if ( featureRequest.filterExpression() && ! featureRequest.filterExpression()->expression().isEmpty() )
+      {
+        expressions.push_back( featureRequest.filterExpression()->expression() );
+      }
       for ( auto it = attrFilters.constBegin(); it != attrFilters.constEnd(); it++ )
       {
         // Handle star
@@ -938,17 +1067,19 @@ void QgsWfs3CollectionsItemsHandler::handleRequest( const QgsServerApiContext &c
         }
       }
       filterExpression = expressions.join( QStringLiteral( " AND " ) );
-      req.setFilterExpression( filterExpression );
+      featureRequest.setFilterExpression( filterExpression );
     }
 
     // WFS3 core specs only serves 4326
-    req.setDestinationCrs( crs, context.project()->transformContext() );
-    // Add offset to limit because paging is not supported from QgsFeatureRequest
-    req.setLimit( limit + offset );
+    featureRequest.setDestinationCrs( crs, context.project()->transformContext() );
+    // Add offset to limit because paging is not supported by QgsFeatureRequest
+    featureRequest.setLimit( limit + offset );
     QgsJsonExporter exporter { mapLayer };
+    exporter.setAttributes( featureRequest.subsetOfAttributes() );
+    exporter.setAttributeDisplayName( true );
     exporter.setSourceCrs( mapLayer->crs() );
     QgsFeatureList featureList;
-    QgsFeatureIterator features { mapLayer->getFeatures( req ) };
+    QgsFeatureIterator features { mapLayer->getFeatures( featureRequest ) };
     QgsFeature feat;
     long i { 0 };
     while ( features.nextFeature( feat ) )
@@ -969,11 +1100,11 @@ void QgsWfs3CollectionsItemsHandler::handleRequest( const QgsServerApiContext &c
     {
       if ( filterExpression.isEmpty() )
       {
-        req.setNoAttributes();
+        featureRequest.setNoAttributes();
       }
-      req.setFlags( QgsFeatureRequest::Flag::NoGeometry );
-      req.setLimit( -1 );
-      features = mapLayer->getFeatures( req );
+      featureRequest.setFlags( QgsFeatureRequest::Flag::NoGeometry );
+      featureRequest.setLimit( -1 );
+      features = mapLayer->getFeatures( featureRequest );
       while ( features.nextFeature( feat ) )
       {
         matchedFeaturesCount++;
@@ -1063,27 +1194,51 @@ void QgsWfs3CollectionsFeatureHandler::handleRequest( const QgsServerApiContext 
   {
     throw QgsServerApiImproperlyConfiguredException( QStringLiteral( "Project is invalid or undefined" ) );
   }
+
   // Check collectionId
   const QRegularExpressionMatch match { path().match( context.request()->url().path( ) ) };
   if ( ! match.hasMatch() )
   {
     throw QgsServerApiNotFoundError( QStringLiteral( "Collection was not found" ) );
   }
+
   const QString collectionId { match.captured( QStringLiteral( "collectionId" ) ) };
   // May throw if not found
-  QgsVectorLayer *mapLayer { layerFromCollection( context, collectionId ) };
+  QgsVectorLayer *mapLayer { layerFromCollectionId( context, collectionId ) };
   Q_ASSERT( mapLayer );
+
+  // Check if the layer is published, raise not found if it is not
+  checkLayerIsAccessible( mapLayer, context );
+
   const std::string title { mapLayer->title().isEmpty() ? mapLayer->name().toStdString() : mapLayer->title().toStdString() };
 
   if ( context.request()->method() == QgsServerRequest::Method::GetMethod )
   {
     const QString featureId { match.captured( QStringLiteral( "featureId" ) ) };
-    QgsJsonExporter exporter { mapLayer };
-    const QgsFeature feature { mapLayer->getFeature( featureId.toLongLong() ) };
-    if ( ! feature.isValid() )
+
+#ifdef HAVE_SERVER_PYTHON_PLUGINS
+    QgsAccessControl *accessControl = context.serverInterface()->accessControls();
+    //scoped pointer to restore all original layer filters (subsetStrings) when pointer goes out of scope
+    //there's LOTS of potential exit paths here, so we avoid having to restore the filters manually
+    std::unique_ptr< QgsOWSServerFilterRestorer > filterRestorer( new QgsOWSServerFilterRestorer() );
+    if ( accessControl )
+    {
+      QgsOWSServerFilterRestorer::applyAccessControlLayerFilters( accessControl, mapLayer, filterRestorer->originalFilters() );
+    }
+#endif
+
+    QgsFeatureRequest featureRequest = filteredRequest( mapLayer, context );
+    featureRequest.setFilterFid( featureId.toLongLong() );
+    QgsFeature feature;
+    QgsFeatureIterator it { mapLayer->getFeatures( featureRequest ) };
+    if ( ! it.nextFeature( feature ) && feature.isValid() )
     {
       QgsServerApiInternalServerError( QStringLiteral( "Invalid feature [%1]" ).arg( featureId ) );
     }
+
+    QgsJsonExporter exporter { mapLayer };
+    exporter.setAttributes( featureRequest.subsetOfAttributes() );
+    exporter.setAttributeDisplayName( true );
     json data = exporter.exportFeatureToJsonObject( feature );
     data["links"] = links( context );
     json navigation = json::array();
@@ -1114,7 +1269,7 @@ json QgsWfs3CollectionsFeatureHandler::schema( const QgsServerApiContext &contex
   json data;
   Q_ASSERT( context.project() );
 
-  const auto layers { QgsServerApiUtils::publishedWfsLayers<QgsVectorLayer>( context.project() ) };
+  const auto layers { QgsServerApiUtils::publishedWfsLayers<QgsVectorLayer>( context ) };
   // Construct the context with collection id
   for ( const auto &mapLayer : layers )
   {
@@ -1122,7 +1277,7 @@ json QgsWfs3CollectionsFeatureHandler::schema( const QgsServerApiContext &contex
     // Use layer id for operationId
     const QString layerId { mapLayer->id() };
     const std::string title { mapLayer->title().isEmpty() ? mapLayer->name().toStdString() : mapLayer->title().toStdString() };
-    const std::string path { QgsServerApiUtils::appendMapParameter( context.apiRootPath() + QStringLiteral( "collections/%1/items/{featureId}" ).arg( shortName ), context.request()->url() ).toStdString() };
+    const std::string path { QgsServerApiUtils::appendMapParameter( context.apiRootPath() + QStringLiteral( "/collections/%1/items/{featureId}" ).arg( shortName ), context.request()->url() ).toStdString() };
 
     data[ path ] =
     {
@@ -1132,6 +1287,13 @@ json QgsWfs3CollectionsFeatureHandler::schema( const QgsServerApiContext &contex
           { "summary", "Retrieve a single feature from the '" + title + "' feature collection"},
           { "description", description() },
           { "operationId", operationId() + '_' + layerId.toStdString() },
+          {
+            "parameters", {{ // array of objects
+                { "$ref", "#/components/parameters/featureId" }
+              }
+            }
+          },
+          // TODO: relations
           {
             "responses", {
               {
@@ -1161,13 +1323,13 @@ json QgsWfs3CollectionsFeatureHandler::schema( const QgsServerApiContext &contex
                   }
                 }
               },
-              defaultResponse()
+              { "default", defaultResponse() }
             }
           }
         }
       }
     };
-  }
+  } // end for loop
   return data;
 }
 

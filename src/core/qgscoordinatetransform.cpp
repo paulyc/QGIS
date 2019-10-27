@@ -517,19 +517,18 @@ QgsRectangle QgsCoordinateTransform::transformBoundingBox( const QgsRectangle &r
 
   // 64 points (<=2.12) is not enough, see #13665, for EPSG:4326 -> EPSG:3574 (say that it is a hard one),
   // are decent result from about 500 points and more. This method is called quite often, but
-  // even with 1000 points it takes < 1ms
+  // even with 1000 points it takes < 1ms.
   // TODO: how to effectively and precisely reproject bounding box?
   const int nPoints = 1000;
   double d = std::sqrt( ( rect.width() * rect.height() ) / std::pow( std::sqrt( static_cast< double >( nPoints ) ) - 1, 2.0 ) );
-  int nXPoints = static_cast< int >( std::ceil( rect.width() / d ) ) + 1;
-  int nYPoints = static_cast< int >( std::ceil( rect.height() / d ) ) + 1;
+  int nXPoints = std::min( static_cast< int >( std::ceil( rect.width() / d ) ) + 1, 1000 );
+  int nYPoints = std::min( static_cast< int >( std::ceil( rect.height() / d ) ) + 1, 1000 );
 
   QgsRectangle bb_rect;
   bb_rect.setMinimal();
 
   // We're interfacing with C-style vectors in the
   // end, so let's do C-style vectors here too.
-
   QVector<double> x( nXPoints * nYPoints );
   QVector<double> y( nXPoints * nYPoints );
   QVector<double> z( nXPoints * nYPoints );
@@ -957,6 +956,31 @@ void QgsCoordinateTransform::invalidateCache( bool disableCache )
 
   sTransforms.clear();
 }
+
+#if PROJ_VERSION_MAJOR>=6
+void QgsCoordinateTransform::removeFromCacheObjectsBelongingToCurrentThread( void *pj_context )
+{
+  // Not completely sure about object order destruction after main() has
+  // exited. So it is safer to check sDisableCache before using sCacheLock
+  // in case sCacheLock would have been destroyed before the current TLS
+  // QgsProjContext object that has called us...
+  if ( sDisableCache )
+    return;
+
+  QgsReadWriteLocker locker( sCacheLock, QgsReadWriteLocker::Write );
+  if ( sDisableCache )
+    return;
+
+  for ( auto it = sTransforms.begin(); it != sTransforms.end(); )
+  {
+    auto &v = it.value();
+    if ( v.d->removeObjectsBelongingToCurrentThread( pj_context ) )
+      it = sTransforms.erase( it );
+    else
+      ++it;
+  }
+}
+#endif
 
 double QgsCoordinateTransform::scaleFactor( const QgsRectangle &ReferenceExtent ) const
 {

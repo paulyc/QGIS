@@ -153,7 +153,7 @@ QgsRasterCalculator::Result QgsRasterCalculator::processCalculation( QgsFeedback
   GDALSetRasterNoDataValue( outputRasterBand, outputNodataValue );
 
   // Check if we need to read the raster as a whole (which is memory inefficient
-  // and not interruptable by the user) by checking if any raster matrix nodes are
+  // and not interruptible by the user) by checking if any raster matrix nodes are
   // in the expression
   bool requiresMatrix = ! calcNode->findNodes( QgsRasterCalcNode::Type::tMatrix ).isEmpty();
 
@@ -220,8 +220,8 @@ QgsRasterCalculator::Result QgsRasterCalculator::processCalculation( QgsFeedback
         }
       }
 
-      QgsRasterMatrix resultMatrix;
-      resultMatrix.setNodataValue( outputNodataValue );
+      // 1 row X mNumOutputColumns matrix
+      QgsRasterMatrix resultMatrix( mNumOutputColumns, 1, nullptr, outputNodataValue );
 
       _rasterData.clear();
       for ( const auto &layerRef : inputBlocks )

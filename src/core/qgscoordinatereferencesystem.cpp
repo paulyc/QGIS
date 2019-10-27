@@ -59,7 +59,7 @@
 //! The length of the string "+lat_1="
 const int LAT_PREFIX_LEN = 7;
 
-CUSTOM_CRS_VALIDATION QgsCoordinateReferenceSystem::mCustomSrsValidation = nullptr;
+CUSTOM_CRS_VALIDATION QgsCoordinateReferenceSystem::sCustomSrsValidation = nullptr;
 
 QReadWriteLock QgsCoordinateReferenceSystem::sSrIdCacheLock;
 QHash< long, QgsCoordinateReferenceSystem > QgsCoordinateReferenceSystem::sSrIdCache;
@@ -271,18 +271,29 @@ bool QgsCoordinateReferenceSystem::createFromString( const QString &definition )
   locker.unlock();
 
   bool result = false;
-  QRegularExpression reCrsId( "^(epsg|postgis|internal|user)\\:(\\d+)$", QRegularExpression::CaseInsensitiveOption );
+  QRegularExpression reCrsId( QStringLiteral( "^(epsg|esri|osgeo|ignf|zangi|iau2000|postgis|internal|user)\\:(\\w+)$" ), QRegularExpression::CaseInsensitiveOption );
   QRegularExpressionMatch match = reCrsId.match( definition );
   if ( match.capturedStart() == 0 )
   {
     QString authName = match.captured( 1 ).toLower();
-    CrsType type = InternalCrsId;
     if ( authName == QLatin1String( "epsg" ) )
-      type = EpsgCrsId;
-    if ( authName == QLatin1String( "postgis" ) )
-      type = PostgisCrsId;
-    long id = match.captured( 2 ).toLong();
-    result = createFromId( id, type );
+    {
+      result = createFromOgcWmsCrs( definition );
+    }
+    else if ( authName == QLatin1String( "postgis" ) )
+    {
+      const long id = match.captured( 2 ).toLong();
+      result = createFromId( id, PostgisCrsId );
+    }
+    else if ( authName == QLatin1String( "esri" ) || authName == QLatin1String( "osgeo" ) || authName == QLatin1String( "ignf" ) || authName == QLatin1String( "zangi" ) || authName == QLatin1String( "iau2000" ) )
+    {
+      result = createFromOgcWmsCrs( definition );
+    }
+    else
+    {
+      const long id = match.captured( 2 ).toLong();
+      result = createFromId( id, InternalCrsId );
+    }
   }
   else
   {
@@ -381,7 +392,7 @@ bool QgsCoordinateReferenceSystem::createFromOgcWmsCrs( const QString &crs )
 
   QString wmsCrs = crs;
 
-  QRegExp re_uri( "http://www\\.opengis\\.net/def/crs/([^/]+).+/(\\d+)", Qt::CaseInsensitive );
+  QRegExp re_uri( "http://www\\.opengis\\.net/def/crs/([^/]+).+/([^/]+)", Qt::CaseInsensitive );
   QRegExp re_urn( "urn:ogc:def:crs:([^:]+).+([^:]+)", Qt::CaseInsensitive );
   if ( re_uri.exactMatch( wmsCrs ) )
   {
@@ -476,19 +487,14 @@ bool QgsCoordinateReferenceSystem::createFromOgcWmsCrs( const QString &crs )
 
 void QgsCoordinateReferenceSystem::validate()
 {
-  if ( d->mIsValid )
+  if ( d->mIsValid || !sCustomSrsValidation )
     return;
 
   d.detach();
 
   // try to validate using custom validation routines
-  if ( mCustomSrsValidation )
-    mCustomSrsValidation( *this );
-
-  if ( !d->mIsValid )
-  {
-    *this = QgsCoordinateReferenceSystem::fromOgcWmsCrs( GEO_EPSG_CRS_AUTHID );
-  }
+  if ( sCustomSrsValidation )
+    sCustomSrsValidation( *this );
 }
 
 bool QgsCoordinateReferenceSystem::createFromSrid( const long id )
@@ -1453,8 +1459,10 @@ void QgsCoordinateReferenceSystem::setProj4String( const QString &proj4String )
 
   if ( !d->mPj )
   {
+#ifdef QGISDEBUG
     const int errNo = proj_context_errno( ctx );
     QgsDebugMsg( QStringLiteral( "proj string rejected: %1" ).arg( proj_errno_string( errNo ) ) );
+#endif
     d->mIsValid = false;
   }
   else
@@ -2024,12 +2032,12 @@ int QgsCoordinateReferenceSystem::openDatabase( const QString &path, sqlite3_dat
 
 void QgsCoordinateReferenceSystem::setCustomCrsValidation( CUSTOM_CRS_VALIDATION f )
 {
-  mCustomSrsValidation = f;
+  sCustomSrsValidation = f;
 }
 
 CUSTOM_CRS_VALIDATION QgsCoordinateReferenceSystem::customCrsValidation()
 {
-  return mCustomSrsValidation;
+  return sCustomSrsValidation;
 }
 
 void QgsCoordinateReferenceSystem::debugPrint()
@@ -2441,6 +2449,9 @@ bool QgsCoordinateReferenceSystem::loadIds( QHash<int, QString> &wkts )
 #if PROJ_VERSION_MAJOR>=6
 static void sync_db_proj_logger( void * /* user_data */, int level, const char *message )
 {
+#ifndef QGISDEBUG
+  Q_UNUSED( message )
+#endif
   if ( level == PJ_LOG_ERROR )
   {
     QgsDebugMsgLevel( QStringLiteral( "PROJ: %1" ).arg( message ), 2 );

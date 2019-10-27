@@ -44,7 +44,7 @@ QVariantMap QgsServerOgcApiHandler::values( const QgsServerApiContext &context )
   const auto constParameters { parameters( context ) };
   for ( const auto &p : constParameters )
   {
-    // value() calls the validators and throw an exception if validation fails
+    // value() calls the validators and throws an exception if validation fails
     result[p.name()] = p.value( context );
   }
   const auto match { path().match( context.request()->url().toString() ) };
@@ -78,25 +78,30 @@ QList<QgsServerOgcApi::ContentType> QgsServerOgcApiHandler::contentTypes() const
 
 void QgsServerOgcApiHandler::handleRequest( const QgsServerApiContext &context ) const
 {
-  Q_UNUSED( context );
+  Q_UNUSED( context )
   throw QgsServerApiNotImplementedException( QStringLiteral( "Subclasses must implement handleRequest" ) );
 }
 
 QString QgsServerOgcApiHandler::contentTypeForAccept( const QString &accept ) const
 {
-
-  QString result;
-  const auto constMimes { QgsServerOgcApi::contentTypeMimes() };
-  for ( const auto &ct : constMimes )
+  for ( auto it = QgsServerOgcApi::contentTypeMimes().constBegin();
+        it != QgsServerOgcApi::contentTypeMimes().constEnd(); ++it )
   {
-    if ( accept.contains( ct ) )
+    const auto constValues = it.value();
+    for ( const auto &value : constValues )
     {
-      result = ct;
-      break;
+      if ( accept.contains( value, Qt::CaseSensitivity::CaseInsensitive ) )
+      {
+        return value;
+      }
     }
   }
-  return result;
+  // Log level info because this is not completely unexpected
+  QgsMessageLog::logMessage( QStringLiteral( "Content type for accept %1 not found!" ).arg( accept ),
+                             QStringLiteral( "Server" ),
+                             Qgis::Info );
 
+  return QString();
 }
 
 void QgsServerOgcApiHandler::write( json &data, const QgsServerApiContext &context, const json &htmlMetadata ) const
@@ -115,10 +120,11 @@ void QgsServerOgcApiHandler::write( json &data, const QgsServerApiContext &conte
     case QgsServerOgcApi::ContentType::GEOJSON:
     case QgsServerOgcApi::ContentType::JSON:
     case QgsServerOgcApi::ContentType::OPENAPI3:
-      jsonDump( data, context, QgsServerOgcApi::contentTypeMimes().value( contentType ) );
+      jsonDump( data, context, QgsServerOgcApi::contentTypeMimes().value( contentType ).first() );
       break;
   }
 }
+
 void QgsServerOgcApiHandler::write( QVariant &data, const QgsServerApiContext &context, const QVariantMap &htmlMetadata ) const
 {
   json j = QgsJsonUtils::jsonFromVariant( data );
@@ -153,7 +159,7 @@ std::string QgsServerOgcApiHandler::href( const QgsServerApiContext &context, co
   url.setPath( url.path() + extraPath );
 
   // (re-)add extension
-  // JSON is the default anyway, we don'n need to add it
+  // JSON is the default anyway so we don't need to add it
   if ( ! extension.isEmpty() )
   {
     // Remove trailing slashes if any.
@@ -170,9 +176,14 @@ std::string QgsServerOgcApiHandler::href( const QgsServerApiContext &context, co
 
 void QgsServerOgcApiHandler::jsonDump( json &data, const QgsServerApiContext &context, const QString &contentType ) const
 {
-  QDateTime time { QDateTime::currentDateTime() };
-  time.setTimeSpec( Qt::TimeSpec::UTC );
-  data["timeStamp"] = time.toString( Qt::DateFormat::ISODate ).toStdString() ;
+  // Do not append timestamp to openapi
+  if ( ! QgsServerOgcApi::contentTypeMimes().value( QgsServerOgcApi::ContentType::OPENAPI3 ).contains( contentType, Qt::CaseSensitivity::CaseInsensitive ) )
+  {
+    QDateTime time { QDateTime::currentDateTime() };
+    time.setTimeSpec( Qt::TimeSpec::UTC );
+    data["timeStamp"] = time.toString( Qt::DateFormat::ISODate ).toStdString() ;
+  }
+  context.response()->setStatusCode( 200 );
   context.response()->setHeader( QStringLiteral( "Content-Type" ), contentType );
 #ifdef QGISDEBUG
   context.response()->write( data.dump( 2 ) );
@@ -183,7 +194,7 @@ void QgsServerOgcApiHandler::jsonDump( json &data, const QgsServerApiContext &co
 
 json QgsServerOgcApiHandler::schema( const QgsServerApiContext &context ) const
 {
-  Q_UNUSED( context );
+  Q_UNUSED( context )
   return nullptr;
 }
 
@@ -230,7 +241,7 @@ QgsVectorLayer *QgsServerOgcApiHandler::layerFromContext( const QgsServerApiCont
   }
   const QString collectionId { match.captured( QStringLiteral( "collectionId" ) ) };
   // May throw if not found
-  return layerFromCollection( context, collectionId );
+  return layerFromCollectionId( context, collectionId );
 
 }
 
@@ -394,8 +405,17 @@ QgsServerOgcApi::ContentType QgsServerOgcApiHandler::contentTypeFromRequest( con
     const QString ctFromAccept { contentTypeForAccept( accept ) };
     if ( ! ctFromAccept.isEmpty() )
     {
-      result = QgsServerOgcApi::contentTypeMimes().key( ctFromAccept );
-      found = true;
+      auto it = QgsServerOgcApi::contentTypeMimes().constBegin();
+      while ( ! found && it != QgsServerOgcApi::contentTypeMimes().constEnd() )
+      {
+        int idx = it.value().indexOf( ctFromAccept );
+        if ( idx >= 0 )
+        {
+          found = true;
+          result = it.key();
+        }
+        it++;
+      }
     }
     else
     {
@@ -463,12 +483,12 @@ QString QgsServerOgcApiHandler::parentLink( const QUrl &url, int levels )
   return result.toString();
 }
 
-QgsVectorLayer *QgsServerOgcApiHandler::layerFromCollection( const QgsServerApiContext &context, const QString &collectionId )
+QgsVectorLayer *QgsServerOgcApiHandler::layerFromCollectionId( const QgsServerApiContext &context, const QString &collectionId )
 {
   const auto mapLayers { context.project()->mapLayersByShortName<QgsVectorLayer *>( collectionId ) };
   if ( mapLayers.count() != 1 )
   {
-    throw QgsServerApiImproperlyConfiguredException( QStringLiteral( "Collection with given id (%1) was not found or multiple matches were found" ).arg( collectionId ) );
+    throw QgsServerApiNotFoundError( QStringLiteral( "Collection with given id (%1) was not found or multiple matches were found" ).arg( collectionId ) );
   }
   return mapLayers.first();
 }
@@ -477,27 +497,23 @@ json QgsServerOgcApiHandler::defaultResponse()
 {
   static json defRes =
   {
+    { "description", "An error occurred." },
     {
-      "default", {
-        { "description", "An error occurred." },
+      "content", {
         {
-          "content", {
+          "application/json", {
             {
-              "application/json", {
-                {
-                  "schema", {
-                    { "$ref", "#/components/schemas/exception" }
-                  }
-                },
-                {
-                  "text/html", {
-                    {
-                      "schema", {
-                        { "type", "string" }
-                      }
-                    }
-                  }
-                }
+              "schema", {
+                { "$ref", "#/components/schemas/exception" }
+              }
+            }
+          }
+        },
+        {
+          "text/html", {
+            {
+              "schema", {
+                { "type", "string" }
               }
             }
           }

@@ -10,9 +10,12 @@ INCLUDE_DIRECTORIES(
   ${CMAKE_SOURCE_DIR}/src/gui
   ${CMAKE_SOURCE_DIR}/src/gui/auth
   ${CMAKE_SOURCE_DIR}/external
+  ${CMAKE_SOURCE_DIR}/external/nlohmann
+
   ${CMAKE_BINARY_DIR}/src/ui
   ${CMAKE_BINARY_DIR}/src/core
   ${CMAKE_BINARY_DIR}/src/gui
+
 )
 
 INCLUDE_DIRECTORIES(SYSTEM
@@ -79,6 +82,8 @@ IF (WITH_GUI)
   TARGET_LINK_LIBRARIES(arcgisfeatureserverprovider_a
     qgis_gui
   )
+  ADD_DEPENDENCIES(arcgisfeatureserverprovider ui)
+  ADD_DEPENDENCIES(arcgisfeatureserverprovider_a ui)
 ENDIF ()
 
 INSTALL (TARGETS arcgisfeatureserverprovider
@@ -125,6 +130,7 @@ IF (WITH_GUI)
   TARGET_LINK_LIBRARIES(arcgismapserverprovider
     qgis_gui
   )
+  ADD_DEPENDENCIES(arcgismapserverprovider ui)
 ENDIF ()
 
 INSTALL (TARGETS arcgismapserverprovider

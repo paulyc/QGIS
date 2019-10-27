@@ -45,6 +45,7 @@
 #include "qgslayoutmanager.h"
 #include "qgslayoutitemlabel.h"
 #include "qgscoordinatetransformcontext.h"
+#include "qgsrasterfilewriter.h"
 
 class DummyAlgorithm : public QgsProcessingAlgorithm
 {
@@ -143,11 +144,11 @@ class DummyAlgorithm : public QgsProcessingAlgorithm
 
       // default vector format extension
       QgsProcessingParameterFeatureSink *sinkParam = new QgsProcessingParameterFeatureSink( "sink" );
-      QCOMPARE( sinkParam->defaultFileExtension(), QStringLiteral( "shp" ) ); // before alg is accessible
+      QCOMPARE( sinkParam->defaultFileExtension(), QStringLiteral( "gpkg" ) ); // before alg is accessible
       QVERIFY( !sinkParam->algorithm() );
       QVERIFY( !sinkParam->provider() );
       QVERIFY( addParameter( sinkParam ) );
-      QCOMPARE( sinkParam->defaultFileExtension(), QStringLiteral( "shp" ) );
+      QCOMPARE( sinkParam->defaultFileExtension(), QStringLiteral( "gpkg" ) );
       QCOMPARE( sinkParam->algorithm(), this );
       QVERIFY( !sinkParam->provider() );
 
@@ -171,7 +172,7 @@ class DummyAlgorithm : public QgsProcessingAlgorithm
     {
       // default vector format extension, taken from provider
       QgsProcessingParameterFeatureSink *sinkParam = new QgsProcessingParameterFeatureSink( "sink2" );
-      QCOMPARE( sinkParam->defaultFileExtension(), QStringLiteral( "shp" ) ); // before alg is accessible
+      QCOMPARE( sinkParam->defaultFileExtension(), QStringLiteral( "gpkg" ) ); // before alg is accessible
       QVERIFY( !sinkParam->algorithm() );
       QVERIFY( !sinkParam->provider() );
       QVERIFY( addParameter( sinkParam ) );
@@ -222,7 +223,7 @@ class DummyAlgorithm : public QgsProcessingAlgorithm
       p.addMapLayer( layer3111 );
 
       QString testDataDir = QStringLiteral( TEST_DATA_DIR ) + '/'; //defined in CmakeLists.txt
-      QString raster1 = testDataDir + "tenbytenraster.asc";
+      QString raster1 = testDataDir + "landsat_4326.tif";
       QFileInfo fi1( raster1 );
       QgsRasterLayer *r1 = new QgsRasterLayer( fi1.filePath(), "R1" );
       QVERIFY( r1->isValid() );
@@ -439,7 +440,7 @@ class DummyProvider3 : public QgsProcessingProvider
 
     QStringList supportedOutputRasterLayerExtensions() const override
     {
-      return QStringList() << QStringLiteral( "mig" ) << QStringLiteral( "asc" );
+      return QStringList() << QStringLiteral( "mig" ) << QStringLiteral( "sdat" );
     }
 
     void loadAlgorithms() override
@@ -612,8 +613,7 @@ void TestQgsProcessing::initTestCase()
   QCoreApplication::setApplicationName( QStringLiteral( "QGIS-TEST" ) );
 
   QgsSettings settings;
-  settings.remove( QStringLiteral( "Processing/DefaultOutputVectorLayerExt" ), QgsSettings::Core );
-  settings.remove( QStringLiteral( "Processing/DefaultOutputRasterLayerExt" ), QgsSettings::Core );
+  settings.clear();
 
   QgsApplication::processingRegistry()->addProvider( new QgsNativeAlgorithms( QgsApplication::processingRegistry() ) );
 }
@@ -1252,6 +1252,13 @@ void TestQgsProcessing::algorithm()
   QCOMPARE( r.algorithmById( "p1:alg2" ), p->algorithm( "alg2" ) );
   QVERIFY( !r.algorithmById( "p1:alg3" ) );
   QVERIFY( !r.algorithmById( "px:alg1" ) );
+
+  // alias support
+  QVERIFY( !r.algorithmById( QStringLiteral( "fake:fakealg" ) ) );
+  r.addAlgorithmAlias( QStringLiteral( "fake:fakealg" ), QStringLiteral( "nope:none" ) );
+  QVERIFY( !r.algorithmById( QStringLiteral( "fake:fakealg" ) ) );
+  r.addAlgorithmAlias( QStringLiteral( "fake:fakealg" ), QStringLiteral( "p1:alg1" ) );
+  QCOMPARE( r.algorithmById( QStringLiteral( "fake:fakealg" ) ), p->algorithm( "alg1" ) );
 
   // test that algorithmById can transparently map 'qgis' algorithms across to matching 'native' algorithms
   // this allows us the freedom to convert qgis python algs to c++ without breaking api or existing models
@@ -2212,7 +2219,7 @@ void TestQgsProcessing::parameterCrs()
   QgsProject p;
   p.setCrs( QgsCoordinateReferenceSystem::fromEpsgId( 28353 ) );
   QString testDataDir = QStringLiteral( TEST_DATA_DIR ) + '/'; //defined in CmakeLists.txt
-  QString raster1 = testDataDir + "tenbytenraster.asc";
+  QString raster1 = testDataDir + "landsat_4326.tif";
   QString raster2 = testDataDir + "landsat.tif";
   QFileInfo fi1( raster1 );
   QgsRasterLayer *r1 = new QgsRasterLayer( fi1.filePath(), "R1" );
@@ -2289,8 +2296,8 @@ void TestQgsProcessing::parameterCrs()
   QCOMPARE( def->valueAsPythonString( "EPSG:12003", context ), QStringLiteral( "'EPSG:12003'" ) );
   QCOMPARE( def->valueAsPythonString( "ProjectCrs", context ), QStringLiteral( "'ProjectCrs'" ) );
   QCOMPARE( def->valueAsPythonString( QStringLiteral( "c:\\test\\new data\\test.dat" ), context ), QStringLiteral( "'c:\\\\test\\\\new data\\\\test.dat'" ) );
-  QCOMPARE( def->valueAsPythonString( raster1, context ), QString( "'" ) + testDataDir + QStringLiteral( "tenbytenraster.asc'" ) );
-  QCOMPARE( def->valueAsPythonString( r1->id(), context ), QString( "'" ) + testDataDir + QStringLiteral( "tenbytenraster.asc'" ) );
+  QCOMPARE( def->valueAsPythonString( raster1, context ), QString( "'" ) + testDataDir + QStringLiteral( "landsat_4326.tif'" ) );
+  QCOMPARE( def->valueAsPythonString( r1->id(), context ), QString( "'" ) + testDataDir + QStringLiteral( "landsat_4326.tif'" ) );
   QCOMPARE( def->valueAsPythonString( QVariant::fromValue( QgsProperty::fromExpression( "\"a\"=1" ) ), context ), QStringLiteral( "QgsProperty.fromExpression('\"a\"=1')" ) );
   QCOMPARE( def->valueAsPythonString( "uri='complex' username=\"complex\"", context ), QStringLiteral( "'uri=\\'complex\\' username=\\\"complex\\\"'" ) );
 
@@ -2485,7 +2492,7 @@ void TestQgsProcessing::parameterExtent()
   // setup a context
   QgsProject p;
   QString testDataDir = QStringLiteral( TEST_DATA_DIR ) + '/'; //defined in CmakeLists.txt
-  QString raster1 = testDataDir + "tenbytenraster.asc";
+  QString raster1 = testDataDir + "landsat_4326.tif";
   QString raster2 = testDataDir + "landsat.tif";
   QFileInfo fi1( raster1 );
   QgsRasterLayer *r1 = new QgsRasterLayer( fi1.filePath(), "R1" );
@@ -2543,10 +2550,10 @@ void TestQgsProcessing::parameterExtent()
   QCOMPARE( QgsProcessingParameters::parameterAsExtent( def.get(), params, context ),  r1->extent() );
   QCOMPARE( QgsProcessingParameters::parameterAsExtentCrs( def.get(), params, context ).authid(), QStringLiteral( "EPSG:4326" ) );
   ext = QgsProcessingParameters::parameterAsExtent( def.get(), params, context, QgsCoordinateReferenceSystem( "EPSG:4326" ) );
-  QGSCOMPARENEAR( ext.xMinimum(), 1535375, 100 );
-  QGSCOMPARENEAR( ext.xMaximum(), 1535475, 100 );
-  QGSCOMPARENEAR( ext.yMinimum(),  5083255, 100 );
-  QGSCOMPARENEAR( ext.yMaximum(), 5083355, 100 );
+  QGSCOMPARENEAR( ext.xMinimum(), 17.942777, 0.001 );
+  QGSCOMPARENEAR( ext.xMaximum(), 17.944704, 0.001 );
+  QGSCOMPARENEAR( ext.yMinimum(),  30.229681, 0.001 );
+  QGSCOMPARENEAR( ext.yMaximum(), 30.231616, 0.001 );
 
   // layer as parameter
   params.insert( "non_optional", QVariant::fromValue( r1 ) );
@@ -2554,63 +2561,63 @@ void TestQgsProcessing::parameterExtent()
   QCOMPARE( QgsProcessingParameters::parameterAsExtent( def.get(), params, context ),  r1->extent() );
   QCOMPARE( QgsProcessingParameters::parameterAsExtentCrs( def.get(), params, context ).authid(), QStringLiteral( "EPSG:4326" ) );
   ext = QgsProcessingParameters::parameterAsExtent( def.get(), params, context, QgsCoordinateReferenceSystem( "EPSG:4326" ) );
-  QGSCOMPARENEAR( ext.xMinimum(), 1535375, 100 );
-  QGSCOMPARENEAR( ext.xMaximum(), 1535475, 100 );
-  QGSCOMPARENEAR( ext.yMinimum(),  5083255, 100 );
-  QGSCOMPARENEAR( ext.yMaximum(), 5083355, 100 );
+  QGSCOMPARENEAR( ext.xMinimum(), 17.942777, 0.001 );
+  QGSCOMPARENEAR( ext.xMaximum(), 17.944704, 0.001 );
+  QGSCOMPARENEAR( ext.yMinimum(),  30.229681, 0.001 );
+  QGSCOMPARENEAR( ext.yMaximum(), 30.231616, 0.001 );
   QgsGeometry gExt = QgsProcessingParameters::parameterAsExtentGeometry( def.get(), params, context, QgsCoordinateReferenceSystem( "EPSG:4326" ) );
   QCOMPARE( gExt.constGet()->vertexCount(), 5 );
   ext = gExt.boundingBox();
-  QGSCOMPARENEAR( ext.xMinimum(), 1535375, 100 );
-  QGSCOMPARENEAR( ext.xMaximum(), 1535475, 100 );
-  QGSCOMPARENEAR( ext.yMinimum(),  5083255, 100 );
-  QGSCOMPARENEAR( ext.yMaximum(), 5083355, 100 );
+  QGSCOMPARENEAR( ext.xMinimum(), 17.942777, 0.001 );
+  QGSCOMPARENEAR( ext.xMaximum(), 17.944704, 0.001 );
+  QGSCOMPARENEAR( ext.yMinimum(),  30.229681, 0.001 );
+  QGSCOMPARENEAR( ext.yMaximum(), 30.231616, 0.001 );
 
   // using feature source definition
   params.insert( "non_optional",  QgsProcessingFeatureSourceDefinition( r1->id() ) );
   QCOMPARE( QgsProcessingParameters::parameterAsExtentCrs( def.get(), params, context ).authid(), QStringLiteral( "EPSG:4326" ) );
   ext = QgsProcessingParameters::parameterAsExtent( def.get(), params, context, QgsCoordinateReferenceSystem( "EPSG:4326" ) );
-  QGSCOMPARENEAR( ext.xMinimum(), 1535375, 100 );
-  QGSCOMPARENEAR( ext.xMaximum(), 1535475, 100 );
-  QGSCOMPARENEAR( ext.yMinimum(),  5083255, 100 );
-  QGSCOMPARENEAR( ext.yMaximum(), 5083355, 100 );
+  QGSCOMPARENEAR( ext.xMinimum(), 17.942777, 0.001 );
+  QGSCOMPARENEAR( ext.xMaximum(), 17.944704, 0.001 );
+  QGSCOMPARENEAR( ext.yMinimum(),  30.229681, 0.001 );
+  QGSCOMPARENEAR( ext.yMaximum(), 30.231616, 0.001 );
   gExt = QgsProcessingParameters::parameterAsExtentGeometry( def.get(), params, context, QgsCoordinateReferenceSystem( "EPSG:4326" ) );
   QCOMPARE( gExt.constGet()->vertexCount(), 5 );
   ext = gExt.boundingBox();
-  QGSCOMPARENEAR( ext.xMinimum(), 1535375, 100 );
-  QGSCOMPARENEAR( ext.xMaximum(), 1535475, 100 );
-  QGSCOMPARENEAR( ext.yMinimum(),  5083255, 100 );
-  QGSCOMPARENEAR( ext.yMaximum(), 5083355, 100 );
+  QGSCOMPARENEAR( ext.xMinimum(), 17.942777, 0.001 );
+  QGSCOMPARENEAR( ext.xMaximum(), 17.944704, 0.001 );
+  QGSCOMPARENEAR( ext.yMinimum(),  30.229681, 0.001 );
+  QGSCOMPARENEAR( ext.yMaximum(), 30.231616, 0.001 );
   params.insert( "non_optional",  QgsProcessingFeatureSourceDefinition( QgsProperty::fromValue( QVariant::fromValue( r1 ) ) ) );
   QCOMPARE( QgsProcessingParameters::parameterAsExtentCrs( def.get(), params, context ).authid(), QStringLiteral( "EPSG:4326" ) );
   ext = QgsProcessingParameters::parameterAsExtent( def.get(), params, context, QgsCoordinateReferenceSystem( "EPSG:4326" ) );
-  QGSCOMPARENEAR( ext.xMinimum(), 1535375, 100 );
-  QGSCOMPARENEAR( ext.xMaximum(), 1535475, 100 );
-  QGSCOMPARENEAR( ext.yMinimum(),  5083255, 100 );
-  QGSCOMPARENEAR( ext.yMaximum(), 5083355, 100 );
+  QGSCOMPARENEAR( ext.xMinimum(), 17.942777, 0.001 );
+  QGSCOMPARENEAR( ext.xMaximum(), 17.944704, 0.001 );
+  QGSCOMPARENEAR( ext.yMinimum(),  30.229681, 0.001 );
+  QGSCOMPARENEAR( ext.yMaximum(), 30.231616, 0.001 );
   gExt = QgsProcessingParameters::parameterAsExtentGeometry( def.get(), params, context, QgsCoordinateReferenceSystem( "EPSG:4326" ) );
   QCOMPARE( gExt.constGet()->vertexCount(), 5 );
   ext = gExt.boundingBox();
-  QGSCOMPARENEAR( ext.xMinimum(), 1535375, 100 );
-  QGSCOMPARENEAR( ext.xMaximum(), 1535475, 100 );
-  QGSCOMPARENEAR( ext.yMinimum(),  5083255, 100 );
-  QGSCOMPARENEAR( ext.yMaximum(), 5083355, 100 );
+  QGSCOMPARENEAR( ext.xMinimum(), 17.942777, 0.001 );
+  QGSCOMPARENEAR( ext.xMaximum(), 17.944704, 0.001 );
+  QGSCOMPARENEAR( ext.yMinimum(),  30.229681, 0.001 );
+  QGSCOMPARENEAR( ext.yMaximum(), 30.231616, 0.001 );
 
   // using output layer definition, e.g. from a previous model child algorithm
   params.insert( "non_optional",  QgsProcessingOutputLayerDefinition( r1->id() ) );
   QCOMPARE( QgsProcessingParameters::parameterAsExtentCrs( def.get(), params, context ).authid(), QStringLiteral( "EPSG:4326" ) );
   ext = QgsProcessingParameters::parameterAsExtent( def.get(), params, context, QgsCoordinateReferenceSystem( "EPSG:4326" ) );
-  QGSCOMPARENEAR( ext.xMinimum(), 1535375, 100 );
-  QGSCOMPARENEAR( ext.xMaximum(), 1535475, 100 );
-  QGSCOMPARENEAR( ext.yMinimum(),  5083255, 100 );
-  QGSCOMPARENEAR( ext.yMaximum(), 5083355, 100 );
+  QGSCOMPARENEAR( ext.xMinimum(), 17.942777, 0.001 );
+  QGSCOMPARENEAR( ext.xMaximum(), 17.944704, 0.001 );
+  QGSCOMPARENEAR( ext.yMinimum(),  30.229681, 0.001 );
+  QGSCOMPARENEAR( ext.yMaximum(), 30.231616, 0.001 );
   gExt = QgsProcessingParameters::parameterAsExtentGeometry( def.get(), params, context, QgsCoordinateReferenceSystem( "EPSG:4326" ) );
   QCOMPARE( gExt.constGet()->vertexCount(), 5 );
   ext = gExt.boundingBox();
-  QGSCOMPARENEAR( ext.xMinimum(), 1535375, 100 );
-  QGSCOMPARENEAR( ext.xMaximum(), 1535475, 100 );
-  QGSCOMPARENEAR( ext.yMinimum(),  5083255, 100 );
-  QGSCOMPARENEAR( ext.yMaximum(), 5083355, 100 );
+  QGSCOMPARENEAR( ext.xMinimum(), 17.942777, 0.001 );
+  QGSCOMPARENEAR( ext.xMaximum(), 17.944704, 0.001 );
+  QGSCOMPARENEAR( ext.yMinimum(),  30.229681, 0.001 );
+  QGSCOMPARENEAR( ext.yMaximum(), 30.231616, 0.001 );
 
   // string representing a non-project layer source
   params.insert( "non_optional", raster2 );
@@ -2723,8 +2730,8 @@ void TestQgsProcessing::parameterExtent()
 
   QCOMPARE( def->valueAsPythonString( QVariant(), context ), QStringLiteral( "None" ) );
   QCOMPARE( def->valueAsPythonString( "1,2,3,4", context ), QStringLiteral( "'1,2,3,4'" ) );
-  QCOMPARE( def->valueAsPythonString( r1->id(), context ), QString( "'" ) + testDataDir + QStringLiteral( "tenbytenraster.asc'" ) );
-  QCOMPARE( def->valueAsPythonString( QVariant::fromValue( r1 ), context ), QString( "'" ) + testDataDir + QStringLiteral( "tenbytenraster.asc'" ) );
+  QCOMPARE( def->valueAsPythonString( r1->id(), context ), QString( "'" ) + testDataDir + QStringLiteral( "landsat_4326.tif'" ) );
+  QCOMPARE( def->valueAsPythonString( QVariant::fromValue( r1 ), context ), QString( "'" ) + testDataDir + QStringLiteral( "landsat_4326.tif'" ) );
   QCOMPARE( def->valueAsPythonString( raster2, context ), QString( "'" ) + testDataDir + QStringLiteral( "landsat.tif'" ) );
   QCOMPARE( def->valueAsPythonString( QVariant::fromValue( QgsProperty::fromExpression( "\"a\"=1" ) ), context ), QStringLiteral( "QgsProperty.fromExpression('\"a\"=1')" ) );
   QCOMPARE( def->valueAsPythonString( QgsRectangle( 11, 12, 13, 14 ), context ), QStringLiteral( "'11, 13, 12, 14'" ) );
@@ -5287,10 +5294,10 @@ void TestQgsProcessing::parameterFeatureSink()
   QCOMPARE( def->valueAsPythonString( "uri='complex' username=\"complex\"", context ), QStringLiteral( "'uri=\\'complex\\' username=\\\"complex\\\"'" ) );
   QCOMPARE( def->valueAsPythonString( QStringLiteral( "c:\\test\\new data\\test.dat" ), context ), QStringLiteral( "'c:\\\\test\\\\new data\\\\test.dat'" ) );
 
-  QCOMPARE( def->defaultFileExtension(), QStringLiteral( "shp" ) );
+  QCOMPARE( def->defaultFileExtension(), QStringLiteral( "gpkg" ) );
   QCOMPARE( def->generateTemporaryDestination(), QStringLiteral( "memory:" ) );
   def->setSupportsNonFileBasedOutput( false );
-  QVERIFY( def->generateTemporaryDestination().endsWith( QLatin1String( ".shp" ) ) );
+  QVERIFY( def->generateTemporaryDestination().endsWith( QLatin1String( ".gpkg" ) ) );
   QVERIFY( def->generateTemporaryDestination().startsWith( QgsProcessingUtils::tempFolder() ) );
 
   QVariantMap map = def->toVariantMap();
@@ -5453,8 +5460,8 @@ void TestQgsProcessing::parameterVectorOut()
   QCOMPARE( def->valueAsPythonString( "uri='complex' username=\"complex\"", context ), QStringLiteral( "'uri=\\'complex\\' username=\\\"complex\\\"'" ) );
   QCOMPARE( def->valueAsPythonString( QStringLiteral( "c:\\test\\new data\\test.dat" ), context ), QStringLiteral( "'c:\\\\test\\\\new data\\\\test.dat'" ) );
 
-  QCOMPARE( def->defaultFileExtension(), QStringLiteral( "shp" ) );
-  QVERIFY( def->generateTemporaryDestination().endsWith( QLatin1String( ".shp" ) ) );
+  QCOMPARE( def->defaultFileExtension(), QStringLiteral( "gpkg" ) );
+  QVERIFY( def->generateTemporaryDestination().endsWith( QLatin1String( ".gpkg" ) ) );
   QVERIFY( def->generateTemporaryDestination().startsWith( QgsProcessingUtils::tempFolder() ) );
 
   QVariantMap map = def->toVariantMap();
@@ -5563,12 +5570,12 @@ void TestQgsProcessing::parameterVectorOut()
 
   QgsProcessingContext context3;
   params.insert( QStringLiteral( "x" ), QgsProcessing::TEMPORARY_OUTPUT );
-  QCOMPARE( QgsProcessingParameters::parameterAsOutputLayer( def.get(), params, context3 ).right( 6 ), QStringLiteral( "/x.shp" ) );
+  QCOMPARE( QgsProcessingParameters::parameterAsOutputLayer( def.get(), params, context3 ).right( 6 ), QStringLiteral( "x.gpkg" ) );
 
   QgsProcessingContext context4;
   fs.sink = QgsProperty::fromValue( QgsProcessing::TEMPORARY_OUTPUT );
   params.insert( QStringLiteral( "x" ), QVariant::fromValue( fs ) );
-  QCOMPARE( QgsProcessingParameters::parameterAsOutputLayer( def.get(), params, context4 ).right( 6 ), QStringLiteral( "/x.shp" ) );
+  QCOMPARE( QgsProcessingParameters::parameterAsOutputLayer( def.get(), params, context4 ).right( 6 ), QStringLiteral( "x.gpkg" ) );
 
   // test supported output vector layer extensions
 
@@ -5851,7 +5858,7 @@ void TestQgsProcessing::parameterFileOut()
   QCOMPARE( fromCode->flags(), def->flags() );
   QCOMPARE( fromCode->defaultValue(), def->defaultValue() );
 
-  // outputs definitio test
+  // outputs definition test
   def.reset( new QgsProcessingParameterFileDestination( "html", QString(), QString( "HTML files" ), QString(), false ) );
   std::unique_ptr< QgsProcessingOutputDefinition > outputDef( def->toOutputDefinition() );
   QVERIFY( dynamic_cast< QgsProcessingOutputHtml *>( outputDef.get() ) );
@@ -6539,10 +6546,10 @@ void TestQgsProcessing::combineLayerExtent()
 
   // with reprojection
   ext = QgsProcessingUtils::combineLayerExtents( QList< QgsMapLayer *>() << r1.get() << r2.get(), QgsCoordinateReferenceSystem::fromEpsgId( 3785 ), context );
-  QGSCOMPARENEAR( ext.xMinimum(), 1995320, 10 );
+  QGSCOMPARENEAR( ext.xMinimum(), 1535375.0, 10 );
   QGSCOMPARENEAR( ext.xMaximum(), 2008833, 10 );
   QGSCOMPARENEAR( ext.yMinimum(), 3523084, 10 );
-  QGSCOMPARENEAR( ext.yMaximum(), 3536664, 10 );
+  QGSCOMPARENEAR( ext.yMaximum(), 5083355, 10 );
 }
 
 void TestQgsProcessing::processingFeatureSource()
@@ -7551,6 +7558,7 @@ void TestQgsProcessing::modelExecution()
   QgsProcessingModelAlgorithm model2;
   model2.addModelParameter( new QgsProcessingParameterFeatureSource( "SOURCE_LAYER" ), QgsProcessingModelParameter( "SOURCE_LAYER" ) );
   model2.addModelParameter( new QgsProcessingParameterNumber( "DIST", QString(), QgsProcessingParameterNumber::Double ), QgsProcessingModelParameter( "DIST" ) );
+  model2.addModelParameter( new QgsProcessingParameterCrs( "CRS", QString(), QgsCoordinateReferenceSystem( QStringLiteral( "EPSG:28355" ) ) ), QgsProcessingModelParameter( "CRS" ) );
   QgsProcessingModelChildAlgorithm alg2c1;
   QgsExpressionContext expContext;
   QgsExpressionContextScope *scope = new QgsExpressionContextScope();
@@ -7749,7 +7757,10 @@ void TestQgsProcessing::modelExecution()
                               "from qgis.core import QgsProcessingMultiStepFeedback\n"
                               "from qgis.core import QgsProcessingParameterFeatureSource\n"
                               "from qgis.core import QgsProcessingParameterNumber\n"
+                              "from qgis.core import QgsProcessingParameterCrs\n"
                               "from qgis.core import QgsProcessingParameterFeatureSink\n"
+                              "from qgis.core import QgsCoordinateReferenceSystem\n"
+                              "from qgis.core import QgsExpression\n"
                               "import processing\n"
                               "\n"
                               "\n"
@@ -7758,6 +7769,7 @@ void TestQgsProcessing::modelExecution()
                               "  def initAlgorithm(self, config=None):\n"
                               "    self.addParameter(QgsProcessingParameterFeatureSource('SOURCE_LAYER', '', defaultValue=None))\n"
                               "    self.addParameter(QgsProcessingParameterNumber('DIST', '', type=QgsProcessingParameterNumber.Double, defaultValue=None))\n"
+                              "    self.addParameter(QgsProcessingParameterCrs('CRS', '', defaultValue=QgsCoordinateReferenceSystem('EPSG:28355')))\n"
                               "    self.addParameter(QgsProcessingParameterFeatureSink('MyModelOutput', 'my model output', type=QgsProcessing.TypeVectorPolygon, createByDefault=True, defaultValue=None))\n"
                               "    self.addParameter(QgsProcessingParameterFeatureSink('cx3:MY_OUT', '', type=QgsProcessing.TypeVectorAnyGeometry, createByDefault=True, defaultValue=None))\n"
                               "\n"
@@ -8177,6 +8189,12 @@ void TestQgsProcessing::convertCompatible()
   // layer should be returned unchanged - underlying source is compatible
   QCOMPARE( out, layer->source() );
 
+  QString layerName;
+  out = QgsProcessingUtils::convertToCompatibleFormatAndLayerName( layer, false, QStringLiteral( "test" ), QStringList() << "shp", QString( "shp" ), context, &feedback, layerName );
+  // layer should be returned unchanged - underlying source is compatible
+  QCOMPARE( out, layer->source() );
+  QCOMPARE( layerName, QString() );
+
   // path with layer suffix
   QString vectorWithLayer = testDataDir + "points.shp|layername=points";
   QgsVectorLayer *layer2 = new QgsVectorLayer( vectorWithLayer, "vl" );
@@ -8184,6 +8202,9 @@ void TestQgsProcessing::convertCompatible()
   out = QgsProcessingUtils::convertToCompatibleFormat( layer2, false, QStringLiteral( "test" ), QStringList() << "shp", QString( "shp" ), context, &feedback );
   // layer should be returned unchanged - underlying source is compatible
   QCOMPARE( out, vector );
+  out = QgsProcessingUtils::convertToCompatibleFormatAndLayerName( layer2, false, QStringLiteral( "test" ), QStringList() << "shp", QString( "shp" ), context, &feedback, layerName );
+  QCOMPARE( out, vector );
+  QCOMPARE( layerName, QStringLiteral( "points" ) );
 
   // don't include shp as compatible type
   out = QgsProcessingUtils::convertToCompatibleFormat( layer, false, QStringLiteral( "test" ), QStringList() << "tab", QString( "tab" ), context, &feedback );
@@ -8195,6 +8216,12 @@ void TestQgsProcessing::convertCompatible()
   std::unique_ptr< QgsVectorLayer > t = qgis::make_unique< QgsVectorLayer >( out, "vl2" );
   QCOMPARE( layer->featureCount(), t->featureCount() );
   QCOMPARE( layer->crs(), t->crs() );
+
+  out = QgsProcessingUtils::convertToCompatibleFormatAndLayerName( layer, false, QStringLiteral( "test2" ), QStringList() << "tab", QString( "tab" ), context, &feedback, layerName );
+  QVERIFY( out != layer->source() );
+  QVERIFY( out.endsWith( ".tab" ) );
+  QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
+  QCOMPARE( layerName, QString() );
 
   // use a selection - this will require translation
   QgsFeatureIds ids;
@@ -8213,6 +8240,14 @@ void TestQgsProcessing::convertCompatible()
   t = qgis::make_unique< QgsVectorLayer >( out, "vl2" );
   QCOMPARE( t->featureCount(), static_cast< long >( ids.count() ) );
 
+  out = QgsProcessingUtils::convertToCompatibleFormatAndLayerName( layer, true, QStringLiteral( "test" ), QStringList() << "tab", QString( "tab" ), context, &feedback, layerName );
+  QVERIFY( out != layer->source() );
+  QVERIFY( out.endsWith( ".tab" ) );
+  QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
+  t = qgis::make_unique< QgsVectorLayer >( out, "vl2" );
+  QCOMPARE( t->featureCount(), static_cast< long >( ids.count() ) );
+  QCOMPARE( layerName, QString() );
+
   // using a selection but existing format - will still require translation
   out = QgsProcessingUtils::convertToCompatibleFormat( layer, true, QStringLiteral( "test" ), QStringList() << "shp", QString( "shp" ), context, &feedback );
   QVERIFY( out != layer->source() );
@@ -8220,6 +8255,14 @@ void TestQgsProcessing::convertCompatible()
   QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
   t = qgis::make_unique< QgsVectorLayer >( out, "vl2" );
   QCOMPARE( t->featureCount(), static_cast< long >( ids.count() ) );
+
+  out = QgsProcessingUtils::convertToCompatibleFormatAndLayerName( layer, true, QStringLiteral( "test" ), QStringList() << "shp", QString( "shp" ), context, &feedback, layerName );
+  QVERIFY( out != layer->source() );
+  QVERIFY( out.endsWith( ".shp" ) );
+  QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
+  t = qgis::make_unique< QgsVectorLayer >( out, "vl2" );
+  QCOMPARE( t->featureCount(), static_cast< long >( ids.count() ) );
+  QCOMPARE( layerName, QString() );
 
   // using a feature filter -- this will require translation
   layer->setSubsetString( "1 or 2" );
@@ -8229,7 +8272,36 @@ void TestQgsProcessing::convertCompatible()
   QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
   t = qgis::make_unique< QgsVectorLayer >( out, "vl2" );
   QCOMPARE( t->featureCount(), layer->featureCount() );
+
+  out = QgsProcessingUtils::convertToCompatibleFormatAndLayerName( layer, false, QStringLiteral( "test" ), QStringList() << "shp", QString( "shp" ), context, &feedback, layerName );
+  QVERIFY( out != layer->source() );
+  QVERIFY( out.endsWith( ".shp" ) );
+  QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
+  t = qgis::make_unique< QgsVectorLayer >( out, "vl2" );
+  QCOMPARE( t->featureCount(), layer->featureCount() );
+  QCOMPARE( layerName, QString() );
   layer->setSubsetString( QString() );
+
+  // using GDAL's virtual I/O (/vsizip/, etc.)
+  QString vsiPath = "/vsizip/" + testDataDir + "zip/points2.zip/points.shp";
+  QgsVectorLayer *vsiLayer = new QgsVectorLayer( vsiPath, "vl" );
+  p.addMapLayer( vsiLayer );
+  out = QgsProcessingUtils::convertToCompatibleFormat( vsiLayer, false, QStringLiteral( "test" ), QStringList() << "shp", QString( "shp" ), context, &feedback );
+  QVERIFY( out != layer->source() );
+  QVERIFY( out.endsWith( ".shp" ) );
+  QVERIFY( !out.contains( "/vsizip" ) );
+  QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
+  t = qgis::make_unique< QgsVectorLayer >( out, "vl2" );
+  QCOMPARE( t->featureCount(), layer->featureCount() );
+
+  out = QgsProcessingUtils::convertToCompatibleFormatAndLayerName( vsiLayer, false, QStringLiteral( "test" ), QStringList() << "shp", QString( "shp" ), context, &feedback, layerName );
+  QVERIFY( out != layer->source() );
+  QVERIFY( out.endsWith( ".shp" ) );
+  QVERIFY( !out.contains( "/vsizip" ) );
+  QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
+  t = qgis::make_unique< QgsVectorLayer >( out, "vl2" );
+  QCOMPARE( t->featureCount(), layer->featureCount() );
+  QCOMPARE( layerName, QString() );
 
   // non-OGR source -- must be translated, regardless of extension. (e.g. delimited text provider handles CSV very different to OGR!)
   std::unique_ptr< QgsVectorLayer > memLayer = qgis::make_unique< QgsVectorLayer> ( "Point", "v1", "memory" );
@@ -8246,6 +8318,14 @@ void TestQgsProcessing::convertCompatible()
   t = qgis::make_unique< QgsVectorLayer >( out, "vl2" );
   QCOMPARE( t->featureCount(), memLayer->featureCount() );
 
+  out = QgsProcessingUtils::convertToCompatibleFormatAndLayerName( memLayer.get(), false, QStringLiteral( "test" ), QStringList() << "shp", QString( "shp" ), context, &feedback, layerName );
+  QVERIFY( out != memLayer->source() );
+  QVERIFY( out.endsWith( ".shp" ) );
+  QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
+  t = qgis::make_unique< QgsVectorLayer >( out, "vl2" );
+  QCOMPARE( t->featureCount(), memLayer->featureCount() );
+  QCOMPARE( layerName, QString() );
+
   //delimited text -- must be translated, regardless of extension. (delimited text provider handles CSV very different to OGR!)
   QString csvPath = "file://" + testDataDir + "delimitedtext/testpt.csv?type=csv&useHeader=No&detectTypes=yes&xyDms=yes&geomType=none&subsetIndex=no&watchFile=no";
   std::unique_ptr< QgsVectorLayer > csvLayer = qgis::make_unique< QgsVectorLayer >( csvPath, "vl", "delimitedtext" );
@@ -8256,6 +8336,14 @@ void TestQgsProcessing::convertCompatible()
   QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
   t = qgis::make_unique< QgsVectorLayer >( out, "vl2" );
   QCOMPARE( t->featureCount(), csvLayer->featureCount() );
+
+  out = QgsProcessingUtils::convertToCompatibleFormatAndLayerName( csvLayer.get(), false, QStringLiteral( "test" ), QStringList() << "csv", QString( "csv" ), context, &feedback, layerName );
+  QVERIFY( out != csvLayer->source() );
+  QVERIFY( out.endsWith( ".csv" ) );
+  QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
+  t = qgis::make_unique< QgsVectorLayer >( out, "vl2" );
+  QCOMPARE( t->featureCount(), csvLayer->featureCount() );
+  QCOMPARE( layerName, QString() );
 
   // geopackage with layer
   QString gpkgPath = testDataDir + "points_gpkg.gpkg|layername=points_gpkg";
@@ -8271,29 +8359,59 @@ void TestQgsProcessing::convertCompatible()
   QVERIFY( out.endsWith( ".shp" ) );
   QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
 
+  gpkgPath = testDataDir + "points_gpkg.gpkg|layername=points_gpkg";
+  gpkgLayer = qgis::make_unique< QgsVectorLayer >( gpkgPath, "vl" );
+  QVERIFY( gpkgLayer->isValid() );
+  out = QgsProcessingUtils::convertToCompatibleFormatAndLayerName( gpkgLayer.get(), false, QStringLiteral( "test" ), QStringList() << "gpkg" << "shp", QString( "shp" ), context, &feedback, layerName );
+  // layer SHOULD NOT be translated -- in this case we know that the external tool can handle specifying the correct layer
+  QCOMPARE( out, testDataDir + QStringLiteral( "points_gpkg.gpkg" ) );
+  QCOMPARE( layerName, QStringLiteral( "points_gpkg" ) );
+  gpkgPath = testDataDir + "points_gpkg.gpkg|layername=points_small";
+  gpkgLayer = qgis::make_unique< QgsVectorLayer >( gpkgPath, "vl" );
+  QVERIFY( gpkgLayer->isValid() );
+  out = QgsProcessingUtils::convertToCompatibleFormatAndLayerName( gpkgLayer.get(), false, QStringLiteral( "test" ), QStringList() << "gpkg" << "shp", QString( "shp" ), context, &feedback, layerName );
+  QCOMPARE( out, testDataDir + QStringLiteral( "points_gpkg.gpkg" ) );
+  QCOMPARE( layerName, QStringLiteral( "points_small" ) );
+
   // also test evaluating parameter to compatible format
   std::unique_ptr< QgsProcessingParameterDefinition > def( new QgsProcessingParameterFeatureSource( QStringLiteral( "source" ) ) );
   QVariantMap params;
   params.insert( QStringLiteral( "source" ), QgsProcessingFeatureSourceDefinition( layer->id(), false ) );
   out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPath( def.get(), params, context, QStringList() << "shp", QString( "shp" ), &feedback );
   QCOMPARE( out, testDataDir + "points.shp" );
+  out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPathAndLayerName( def.get(), params, context, QStringList() << "shp", QString( "shp" ), &feedback, &layerName );
+  QCOMPARE( out, testDataDir + "points.shp" );
+  QCOMPARE( layerName, QString() );
 
   // incompatible format, will be converted
   out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPath( def.get(), params, context, QStringList() << "tab", QString( "tab" ), &feedback );
   QVERIFY( out != layer->source() );
   QVERIFY( out.endsWith( ".tab" ) );
   QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
+  out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPathAndLayerName( def.get(), params, context, QStringList() << "tab", QString( "tab" ), &feedback, &layerName );
+  QVERIFY( out != layer->source() );
+  QVERIFY( out.endsWith( ".tab" ) );
+  QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
+  QCOMPARE( layerName, QString() );
 
   // layer as input
   params.insert( QStringLiteral( "source" ), QVariant::fromValue( layer ) );
   out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPath( def.get(), params, context, QStringList() << "shp", QString( "shp" ), &feedback );
   QCOMPARE( out, testDataDir + "points.shp" );
+  out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPathAndLayerName( def.get(), params, context, QStringList() << "shp", QString( "shp" ), &feedback, &layerName );
+  QCOMPARE( out, testDataDir + "points.shp" );
+  QCOMPARE( layerName, QString() );
 
   // incompatible format, will be converted
   out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPath( def.get(), params, context, QStringList() << "tab", QString( "tab" ), &feedback );
   QVERIFY( out != layer->source() );
   QVERIFY( out.endsWith( ".tab" ) );
   QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
+  out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPathAndLayerName( def.get(), params, context, QStringList() << "tab", QString( "tab" ), &feedback, &layerName );
+  QVERIFY( out != layer->source() );
+  QVERIFY( out.endsWith( ".tab" ) );
+  QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
+  QCOMPARE( layerName, QString() );
 
   // selected only, will force export
   params.insert( QStringLiteral( "source" ), QgsProcessingFeatureSourceDefinition( layer->id(), true ) );
@@ -8301,17 +8419,60 @@ void TestQgsProcessing::convertCompatible()
   QVERIFY( out != layer->source() );
   QVERIFY( out.endsWith( ".shp" ) );
   QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
+  out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPathAndLayerName( def.get(), params, context, QStringList() << "shp", QString( "shp" ), &feedback, &layerName );
+  QVERIFY( out != layer->source() );
+  QVERIFY( out.endsWith( ".shp" ) );
+  QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
+  QCOMPARE( layerName, QString() );
 
   // vector layer as default
   def.reset( new QgsProcessingParameterFeatureSource( QStringLiteral( "source" ), QString(), QList<int>(), QVariant::fromValue( layer ) ) );
   params.remove( QStringLiteral( "source" ) );
   out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPath( def.get(), params, context, QStringList() << "shp", QString( "shp" ), &feedback );
   QCOMPARE( out, testDataDir + "points.shp" );
+  out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPathAndLayerName( def.get(), params, context, QStringList() << "shp", QString( "shp" ), &feedback, &layerName );
+  QCOMPARE( out, testDataDir + "points.shp" );
+  QCOMPARE( layerName, QString() );
+
+  // geopackage with layer
+  gpkgPath = testDataDir + "points_gpkg.gpkg|layername=points_gpkg";
+  gpkgLayer = qgis::make_unique< QgsVectorLayer >( gpkgPath, "vl" );
+  QVERIFY( gpkgLayer->isValid() );
+  params.insert( QStringLiteral( "source" ), QVariant::fromValue( gpkgLayer.get() ) );
+  out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPath( def.get(), params, context, QStringList() << "gpkg" << "shp", QString( "shp" ), &feedback );
+  // layer must be translated -- we do not know if external tool can handle picking the correct layer automatically
+  QCOMPARE( out, testDataDir + QStringLiteral( "points_gpkg.gpkg" ) );
+  gpkgPath = testDataDir + "points_gpkg.gpkg|layername=points_small";
+  gpkgLayer = qgis::make_unique< QgsVectorLayer >( gpkgPath, "vl" );
+  QVERIFY( gpkgLayer->isValid() );
+  params.insert( QStringLiteral( "source" ), QVariant::fromValue( gpkgLayer.get() ) );
+  out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPath( def.get(), params, context, QStringList() << "gpkg" << "shp", QString( "shp" ), &feedback );
+  QVERIFY( out.endsWith( ".shp" ) );
+  QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
+
+  gpkgPath = testDataDir + "points_gpkg.gpkg|layername=points_gpkg";
+  gpkgLayer = qgis::make_unique< QgsVectorLayer >( gpkgPath, "vl" );
+  QVERIFY( gpkgLayer->isValid() );
+  params.insert( QStringLiteral( "source" ), QVariant::fromValue( gpkgLayer.get() ) );
+  out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPathAndLayerName( def.get(), params, context, QStringList() << "gpkg" << "shp", QString( "shp" ), &feedback, &layerName );
+  // layer SHOULD NOT be translated -- in this case we know that the external tool can handle specifying the correct layer
+  QCOMPARE( out, testDataDir + QStringLiteral( "points_gpkg.gpkg" ) );
+  QCOMPARE( layerName, QStringLiteral( "points_gpkg" ) );
+  gpkgPath = testDataDir + "points_gpkg.gpkg|layername=points_small";
+  gpkgLayer = qgis::make_unique< QgsVectorLayer >( gpkgPath, "vl" );
+  QVERIFY( gpkgLayer->isValid() );
+  params.insert( QStringLiteral( "source" ), QVariant::fromValue( gpkgLayer.get() ) );
+  out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPathAndLayerName( def.get(), params, context, QStringList() << "gpkg" << "shp", QString( "shp" ), &feedback, &layerName );
+  QCOMPARE( out, testDataDir + QStringLiteral( "points_gpkg.gpkg" ) );
+  QCOMPARE( layerName, QStringLiteral( "points_small" ) );
 
   // output layer as input - e.g. from a previous model child
   params.insert( QStringLiteral( "source" ), QgsProcessingOutputLayerDefinition( layer->id() ) );
   out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPath( def.get(), params, context, QStringList() << "shp", QString( "shp" ), &feedback );
   QCOMPARE( out, testDataDir + "points.shp" );
+  out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPathAndLayerName( def.get(), params, context, QStringList() << "shp", QString( "shp" ), &feedback, &layerName );
+  QCOMPARE( out, testDataDir + "points.shp" );
+  QCOMPARE( layerName, QString() );
 }
 
 void TestQgsProcessing::create()
@@ -8437,16 +8598,29 @@ void TestQgsProcessing::defaultExtensionsForProvider()
   // default implementation should return first supported format for provider
   QCOMPARE( provider.defaultVectorFileExtension( true ), QStringLiteral( "mif" ) );
   QCOMPARE( provider.defaultRasterFileExtension(), QStringLiteral( "mig" ) );
+
+  // a default context should use reasonable defaults
+  QgsProcessingContext context;
+  QCOMPARE( context.preferredVectorFormat(), QStringLiteral( "gpkg" ) );
+  QCOMPARE( context.preferredRasterFormat(), QStringLiteral( "tif" ) );
+
   // unless the user has set a default format, which IS supported by that provider
   QgsSettings settings;
-  settings.setValue( QStringLiteral( "Processing/DefaultOutputVectorLayerExt" ), QStringLiteral( "tab" ), QgsSettings::Core );
-  settings.setValue( QStringLiteral( "Processing/DefaultOutputRasterLayerExt" ), QStringLiteral( "asc" ), QgsSettings::Core );
+
+  settings.setValue( QStringLiteral( "Processing/Configuration/DefaultOutputVectorLayerExt" ), QgsVectorFileWriter::supportedFormatExtensions().indexOf( QStringLiteral( "tab" ) ) );
+  settings.setValue( QStringLiteral( "Processing/Configuration/DefaultOutputRasterLayerExt" ), QgsRasterFileWriter::supportedFormatExtensions().indexOf( QStringLiteral( "sdat" ) ) );
+
   QCOMPARE( provider.defaultVectorFileExtension( true ), QStringLiteral( "tab" ) );
-  QCOMPARE( provider.defaultRasterFileExtension(), QStringLiteral( "asc" ) );
+  QCOMPARE( provider.defaultRasterFileExtension(), QStringLiteral( "sdat" ) );
+
+  // context should respect these as preferred formats
+  QgsProcessingContext context2;
+  QCOMPARE( context2.preferredVectorFormat(), QStringLiteral( "tab" ) );
+  QCOMPARE( context2.preferredRasterFormat(), QStringLiteral( "sdat" ) );
 
   // but if default is not supported by provider, we use a supported format
-  settings.setValue( QStringLiteral( "Processing/DefaultOutputVectorLayerExt" ), QStringLiteral( "gpkg" ), QgsSettings::Core );
-  settings.setValue( QStringLiteral( "Processing/DefaultOutputRasterLayerExt" ), QStringLiteral( "ecw" ), QgsSettings::Core );
+  settings.setValue( QStringLiteral( "Processing/Configuration/DefaultOutputVectorLayerExt" ), QgsVectorFileWriter::supportedFormatExtensions().indexOf( QStringLiteral( "gpkg" ) ) );
+  settings.setValue( QStringLiteral( "Processing/Configuration/DefaultOutputRasterLayerExt" ), QgsRasterFileWriter::supportedFormatExtensions().indexOf( QStringLiteral( "ecw" ) ) );
   QCOMPARE( provider.defaultVectorFileExtension( true ), QStringLiteral( "mif" ) );
   QCOMPARE( provider.defaultRasterFileExtension(), QStringLiteral( "mig" ) );
 }
@@ -8525,7 +8699,7 @@ void TestQgsProcessing::parameterType()
   QgsProcessingRegistry reg;
 
   QVERIFY( reg.parameterType( QStringLiteral( "string" ) ) );
-  QVERIFY( !reg.parameterType( QStringLiteral( "borken" ) ) );
+  QVERIFY( !reg.parameterType( QStringLiteral( "borken" ) ) );  //#spellok
 
   auto paramType = new DummyParameterType();
 

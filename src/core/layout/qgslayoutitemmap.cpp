@@ -662,6 +662,7 @@ bool QgsLayoutItemMap::readPropertiesFromElement( const QDomElement &itemElem, c
 
   //map rotation
   mMapRotation = itemElem.attribute( QStringLiteral( "mapRotation" ), QStringLiteral( "0" ) ).toDouble();
+  mEvaluatedMapRotation = mMapRotation;
 
   // follow map theme
   mFollowVisibilityPreset = itemElem.attribute( QStringLiteral( "followPreset" ) ).compare( QLatin1String( "true" ) ) == 0;
@@ -1495,7 +1496,7 @@ QgsExpressionContext QgsLayoutItemMap::createExpressionContext() const
   scope->addVariable( QgsExpressionContextScope::StaticVariable( QStringLiteral( "map_layer_ids" ), layersIds, true ) );
   scope->addVariable( QgsExpressionContextScope::StaticVariable( QStringLiteral( "map_layers" ), layers, true ) );
 
-  scope->addFunction( QStringLiteral( "is_layer_visible" ), new QgsExpressionContextUtils::GetLayerVisibility( layersInMap ) );
+  scope->addFunction( QStringLiteral( "is_layer_visible" ), new QgsExpressionContextUtils::GetLayerVisibility( layersInMap, scale() ) );
 
   return context;
 }
@@ -1778,6 +1779,11 @@ void QgsLayoutItemMap::connectUpdateSlot()
     } );
   }
   connect( mLayout, &QgsLayout::refreshed, this, &QgsLayoutItemMap::invalidateCache );
+  connect( &mLayout->renderContext(), &QgsLayoutRenderContext::predefinedScalesChanged, this, [ = ]
+  {
+    if ( mAtlasScalingMode == Predefined )
+      updateAtlasFeature();
+  } );
 
   connect( project->mapThemeCollection(), &QgsMapThemeCollection::mapThemeChanged, this, &QgsLayoutItemMap::mapThemeChanged );
 }
@@ -2363,8 +2369,14 @@ void QgsLayoutItemMap::updateAtlasFeature()
     double originalScale = calc.calculate( originalExtent, rect().width() );
     double geomCenterX = ( xa1 + xa2 ) / 2.0;
     double geomCenterY = ( ya1 + ya2 ) / 2.0;
-
-    if ( mAtlasScalingMode == Fixed || isPointLayer )
+    QVector<qreal> scales;
+    Q_NOWARN_DEPRECATED_PUSH
+    if ( !mLayout->reportContext().predefinedScales().empty() ) // remove when deprecated method is removed
+      scales = mLayout->reportContext().predefinedScales();
+    else
+      scales = mLayout->renderContext().predefinedScales();
+    Q_NOWARN_DEPRECATED_POP
+    if ( mAtlasScalingMode == Fixed || isPointLayer || scales.isEmpty() )
     {
       // only translate, keep the original scale (i.e. width x height)
       double xMin = geomCenterX - originalExtent.width() / 2.0;
@@ -2384,7 +2396,6 @@ void QgsLayoutItemMap::updateAtlasFeature()
       // choose one of the predefined scales
       double newWidth = originalExtent.width();
       double newHeight = originalExtent.height();
-      QVector<qreal> scales = mLayout->reportContext().predefinedScales();
       for ( int i = 0; i < scales.size(); i++ )
       {
         double ratio = scales[i] / originalScale;

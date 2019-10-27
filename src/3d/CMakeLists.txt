@@ -33,12 +33,14 @@ SET(QGIS_3D_SRCS
   processing/qgsalgorithmtessellate.cpp
 
   symbols/qgsabstract3dsymbol.cpp
+  symbols/qgsbillboardgeometry.cpp
   symbols/qgsline3dsymbol.cpp
   symbols/qgsline3dsymbol_p.cpp
   symbols/qgslinematerial_p.cpp
   symbols/qgslinevertexdata_p.cpp
   symbols/qgsmesh3dsymbol.cpp
   symbols/qgsmesh3dsymbol_p.cpp
+  symbols/qgspoint3dbillboardmaterial.cpp
   symbols/qgspoint3dsymbol.cpp
   symbols/qgspoint3dsymbol_p.cpp
   symbols/qgspolygon3dsymbol.cpp
@@ -77,6 +79,8 @@ SET(QGIS_3D_MOC_HDRS
 
   processing/qgs3dalgorithms.h
 
+  symbols/qgsbillboardgeometry.h
+  symbols/qgspoint3dbillboardmaterial.h
   symbols/qgslinematerial_p.h
 
   terrain/qgsdemterraintileloader_p.h
@@ -164,6 +168,8 @@ INCLUDE_DIRECTORIES(
   ${CMAKE_SOURCE_DIR}/src/core/layout
   ${CMAKE_SOURCE_DIR}/src/core/3d
   ${CMAKE_SOURCE_DIR}/external
+  ${CMAKE_SOURCE_DIR}/external/nlohmann
+
   ${CMAKE_BINARY_DIR}/src/core
   ${CMAKE_BINARY_DIR}/src/3d
 )

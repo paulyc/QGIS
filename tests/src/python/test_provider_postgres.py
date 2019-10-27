@@ -1376,6 +1376,45 @@ class TestPyQgsPostgresProvider(unittest.TestCase, ProviderTestCase):
         self.assertEqual(vl.featureCount(), 4000)
         print("--- %s seconds ---" % (time.time() - start_time))
 
+    def testFilterOnCustomBbox(self):
+        extent = QgsRectangle(-68, 70, -67, 80)
+        request = QgsFeatureRequest().setFilterRect(extent)
+        dbconn = 'dbname=\'qgis_test\''
+        uri = '%s srid=4326 key="pk" sslmode=disable table="qgis_test"."some_poly_data_shift_bbox" (geom)' % (dbconn)
+
+        def _test(vl, ids):
+            values = {feat['pk']: 'x' for feat in vl.getFeatures(request)}
+            expected = {x: 'x' for x in ids}
+            self.assertEqual(values, expected)
+
+        vl = QgsVectorLayer(uri, "testgeom", "postgres")
+        self.assertTrue(vl.isValid())
+        _test(vl, [2, 3])
+
+        vl = QgsVectorLayer(uri + ' bbox=shiftbox', "testgeom", "postgres")
+        self.assertTrue(vl.isValid())
+        _test(vl, [1, 3])
+
+    def testValidLayerDiscoverRelationsNone(self):
+        vl = QgsVectorLayer(self.dbconn + ' sslmode=disable key=\'pk\' srid=4326 type=POINT table="qgis_test"."someData" (geom) sql=', 'test', 'postgres')
+        self.assertTrue(vl.isValid())
+        self.assertEqual(vl.dataProvider().discoverRelations(vl, []), [])
+
+    def testInvalidLayerDiscoverRelations(self):
+        vl = QgsVectorLayer('{} table="qgis_test"."invalid_layer" sql='.format(self.dbconn), "invalid_layer", "postgres")
+        self.assertFalse(vl.isValid())
+        self.assertEqual(vl.dataProvider().discoverRelations(vl, []), [])
+
+    def testCheckTidPkOnViews(self):
+        """Test vector layer based on a view with `ctid` as a key"""
+
+        # This is valid
+        vl0 = QgsVectorLayer(self.dbconn + ' checkPrimaryKeyUnicity=\'0\'  sslmode=disable key=\'ctid\' srid=4326 type=POINT table="qgis_test"."b31799_test_view_ctid" (geom) sql=', 'test', 'postgres')
+        self.assertTrue(vl0.isValid())
+        self.assertEqual(vl0.featureCount(), 10)
+        for f in vl0.getFeatures():
+            self.assertNotEqual(f.attribute(0), NULL)
+
 
 class TestPyQgsPostgresProviderCompoundKey(unittest.TestCase, ProviderTestCase):
 

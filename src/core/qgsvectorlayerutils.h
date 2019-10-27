@@ -283,6 +283,15 @@ class CORE_EXPORT QgsVectorLayerUtils
      */
     static QgsFeatureList makeFeaturesCompatible( const QgsFeatureList &features, const QgsVectorLayer *layer );
 
+
+    /**
+     * \return true if the \param feature field at index \param fieldIndex from \param layer
+     * is editable, false if the field is readonly
+     *
+     * \since QGIS 3.10
+     */
+    static bool fieldIsEditable( const QgsVectorLayer *layer, int fieldIndex, const QgsFeature &feature );
+
 };
 
 

@@ -30,9 +30,11 @@ INCLUDE_DIRECTORIES(
   ${CMAKE_SOURCE_DIR}/src/core
   ${CMAKE_SOURCE_DIR}/src/core/expression
   ${CMAKE_SOURCE_DIR}/src/core/geometry
+  ${CMAKE_SOURCE_DIR}/src/core/layertree
   ${CMAKE_SOURCE_DIR}/src/core/metadata
   ${CMAKE_SOURCE_DIR}/src/gui
   ${CMAKE_SOURCE_DIR}/external
+  ${CMAKE_SOURCE_DIR}/external/nlohmann
 
   ${CMAKE_BINARY_DIR}/src/core
   ${CMAKE_BINARY_DIR}/src/gui
@@ -53,6 +55,7 @@ IF (WITH_GUI)
   TARGET_LINK_LIBRARIES (delimitedtextprovider
     qgis_gui
   )
+  ADD_DEPENDENCIES(delimitedtextprovider ui)
 ENDIF ()
 
 TARGET_COMPILE_DEFINITIONS(delimitedtextprovider PRIVATE "-DQT_NO_FOREACH")
