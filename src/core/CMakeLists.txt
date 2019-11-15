@@ -146,6 +146,7 @@ SET(QGIS_CORE_SRCS
   providers/gdal/qgsgdalproviderbase.cpp
   providers/gdal/qgsgdalprovider.cpp
   providers/gdal/qgsgdaldataitems.cpp
+  providers/gdal/qgstdwrprovider.cpp
 
   providers/memory/qgsmemoryfeatureiterator.cpp
   providers/memory/qgsmemoryprovider.cpp
@@ -503,6 +504,7 @@ SET(QGIS_CORE_SRCS
   raster/qgsrastershader.cpp
   raster/qgsrastershaderfunction.cpp
   raster/qgsrastertransparency.cpp
+  raster/qgstdwrrasterdataprovider.cpp
 
   raster/qgsbilinearrasterresampler.cpp
   raster/qgsbrightnesscontrastfilter.cpp
@@ -766,7 +768,9 @@ SET(QGIS_CORE_MOC_HDRS
   processing/qgsprocessingregistry.h
 
   providers/gdal/qgsgdalprovider.h
+  providers/gdal/qgsgdalproviderbase.h
   providers/gdal/qgsgdaldataitems.h
+  providers/gdal/qgstdwrprovider.h
 
   providers/memory/qgsmemoryprovider.h
 
@@ -786,6 +790,7 @@ SET(QGIS_CORE_MOC_HDRS
   raster/qgsrasterinterface.h
   raster/qgsrasterlayerrenderer.h
   raster/qgsrasterprojector.h
+  raster/qgstdwrrasterdataprovider.h
 
   mesh/qgsmeshdataprovider.h
   mesh/qgsmeshlayer.h

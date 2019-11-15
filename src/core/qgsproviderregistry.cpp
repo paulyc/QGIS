@@ -33,6 +33,7 @@
 #include "qgsproject.h"
 #include "providers/memory/qgsmemoryprovider.h"
 #include "providers/gdal/qgsgdalprovider.h"
+#include "providers/gdal/qgstdwrprovider.h"
 #include "providers/ogr/qgsogrprovider.h"
 #include "providers/meshmemory/qgsmeshmemorydataprovider.h"
 #ifdef HAVE_STATIC_PROVIDERS
@@ -108,6 +109,7 @@ void QgsProviderRegistry::init()
   Q_NOWARN_DEPRECATED_POP
   mProviders[ QgsGdalProvider::providerKey() ] = new QgsGdalProviderMetadata();
   mProviders[ QgsOgrProvider::providerKey() ] = new QgsOgrProviderMetadata();
+  mProviders[ QgsTdwrProvider::providerKey() ] = new QgsTdwrProvider::Metadata();
 #ifdef HAVE_STATIC_PROVIDERS
   mProviders[ QgsWmsProvider::providerKey() ] = new QgsWmsProviderMetadata();
   mProviders[ QgsPostgresProvider::providerKey() ] = new QgsPostgresProviderMetadata();

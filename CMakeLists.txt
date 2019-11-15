@@ -30,6 +30,8 @@ ENDIF (APPLE)
 MATH(EXPR QGIS_VERSION_INT "${CPACK_PACKAGE_VERSION_MAJOR}*10000+${CPACK_PACKAGE_VERSION_MINOR}*100+${CPACK_PACKAGE_VERSION_PATCH}")
 MESSAGE(STATUS "QGIS version: ${COMPLETE_VERSION} ${RELEASE_NAME} (${QGIS_VERSION_INT})")
 
+SET(CMAKE_C_COMPILER /opt/llvm/bin/clang)
+SET(CMAKE_CXX_COMPILER /opt/llvm/bin/clang++)
 
 #############################################################
 # Configure OpenCL if available
